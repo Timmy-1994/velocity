@@ -22,7 +22,9 @@ var Windy = function(params) {
   var PARTICLE_REDUCTION = Math.pow(window.devicePixelRatio, 1 / 3) || 1.6; // multiply particle count for mobiles by this amount
   var FRAME_RATE = params.frameRate || 15;
   var FRAME_TIME = 1000 / FRAME_RATE; // desired frames per second
-  var OPACITY = 0.97;
+  var OPACITY = params.opacity || 0.97;
+  var reverseX = params.reverseX || false;
+  var reverseY = params.reverseY || false;
 
   var defaulColorScale = [
     "rgb(36,104, 180)",
@@ -141,7 +143,7 @@ var Windy = function(params) {
 
     if (data.length < 2 ) supported = false;
     if (!supported) console.log("Windy Error: data must have at least two components (u,v)");
-    
+
     builder = createBuilder(data);
     var header = builder.header;
 
@@ -150,7 +152,7 @@ var Windy = function(params) {
       console.log("Windy Error: Only data with Latitude_Longitude coordinates is supported");
     }
     supported = true;  // reset for futher checks
-    
+
     λ0 = header.lo1;
     φ0 = header.la1; // the grid's origin (e.g., 0.0E, 90.0N)
 
@@ -187,13 +189,28 @@ var Windy = function(params) {
     for (var j = 0; j < nj; j++) {
       var row = [];
       for (var i = 0; i < ni; i++, p++) {
-        row[i] = builder.data(p);
+//        row[i] = builder.data(p);
+        if (reverseX) {
+          row.unshift(builder.data(p));
+        } else {
+          row.push(builder.data(p));
+        }
       }
       if (isContinuous) {
         // For wrapped grids, duplicate first column as last column to simplify interpolation logic
-        row.push(row[0]);
+//        row.push(row[0]);
+        if (reverseX) {
+          row.unshift(row[row.length-1]);
+        } else {
+          row.push(row[0]);
+        }
       }
-      grid[j] = row;
+//      grid[j] = row;
+      if (reverseY) {
+        grid.unshift(row);
+      } else {
+        grid.push(row);
+      }
     }
 
     callback({
