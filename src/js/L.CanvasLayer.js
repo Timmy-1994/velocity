@@ -70,6 +70,7 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
     console.log('canvas onAdd', this);
     this._map = map;
     this._canvas = L.DomUtil.create("canvas", "leaflet-layer");
+    this._canvas.style.pointerEvents = 'none';
     this.tiles = {};
 
     var size = this._map.getSize();
