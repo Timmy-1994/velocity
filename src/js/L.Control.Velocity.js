@@ -5,7 +5,7 @@ L.Control.Velocity = L.Control.extend({
     // Could be any combination of 'bearing' (angle toward which the flow goes) or 'meteo' (angle from which the flow comes)
     // and 'CW' (angle value increases clock-wise) or 'CCW' (angle value increases counter clock-wise)
     angleConvention: "bearingCCW",
-    // Could be 'm/s' for meter per second, 'k/h' for kilometer per hour or 'kt' for knots
+    // Could be 'm/s' for meter per second, 'k/h' & 'km/h' for kilometer per hour or 'kt' & 'kn' for knots, 'mph' for miles per hour.
     speedUnit: "m/s",
     onAdd: null,
     onRemove: null
@@ -29,14 +29,18 @@ L.Control.Velocity = L.Control.extend({
 
   vectorToSpeed: function(uMs, vMs, unit) {
     var velocityAbs = Math.sqrt(Math.pow(uMs, 2) + Math.pow(vMs, 2));
-    // Default is m/s
-    if (unit === "k/h") {
+    switch (unit) {
+    case 'k/h':
+    case 'km/h':
       return this.meterSec2kilometerHour(velocityAbs);
-    } else if (unit === "kt") {
+    case 'kt':
+    case 'kn':
       return this.meterSec2Knots(velocityAbs);
-    } else {
-      return velocityAbs;
+    case 'mph':
+      return this.meterSec2milesPerHour(velocityAbs);
+    default: // Default is m/s
     }
+    return velocityAbs;
   },
 
   vectorToDegrees: function(uMs, vMs, angleConvention) {
@@ -64,6 +68,9 @@ L.Control.Velocity = L.Control.extend({
 
   meterSec2kilometerHour: function(meters) {
     return meters * 3.6;
+  },
+  meterSec2milesPerHour: function(meters) {
+    return meters * 2.236936;
   },
 
   _onMouseMove: function(e) {
