@@ -39,6 +39,14 @@ var GradientCanvas = function(params) {
 
   const colorScale = params.colorScale || defaulColorScale;
 
+  var interpolateFn = interpolateBI;
+  if (typeof params.interpolateType === 'string') {
+    interpolateFn = (params.interpolateType.toLowerCase() == 'nearestneighbor')? interpolateNN : interpolateBI;
+  }
+  if (typeof params.interpolateType === 'function') {
+    interpolateFn = params.interpolateType;
+  }
+
   var builder;
   var grid;
   var gridData = params.data;
@@ -82,8 +90,7 @@ var GradientCanvas = function(params) {
       header: data,
       data: function(i) {
         return data.d['v'][i];
-      },
-      interpolate: bilinearInterpolateVector
+      }
     };
   };
 
@@ -132,16 +139,17 @@ var GradientCanvas = function(params) {
       }
     }
 
-    callback(interpolate);
+    callback(interpolateFn);
   };
 
   /**
-   * Get interpolated grid value from Lon/Lat position
+   * Get interpolated grid value from Lon/Lat position by bilinear
    * @param λ {Float} Longitude
    * @param φ {Float} Latitude
+   * @param grid {2D-Array} data grid
    * @returns {Object}
    */
-  var interpolate = function(λ, φ) {
+  function interpolateBI(λ, φ, grid) {
     if (!grid) return null;
 
     var i = floorMod(λ - λ0, 360) / Δλ; // calculate longitude index in wrapped range [0, 360)
@@ -152,12 +160,6 @@ var GradientCanvas = function(params) {
     var fj = Math.floor(j),
       cj = fj + 1;
 
-    /*var row = grid[fj] // nearest neighbor
-    if (row) {
-      var g00 = row[fi]
-      if (isValue(g00)) return g00;
-    }*/
-
     var row;
     if ((row = grid[fj])) {
       var g00 = row[fi];
@@ -167,9 +169,33 @@ var GradientCanvas = function(params) {
         var g11 = row[ci];
         if (isValue(g01) && isValue(g11)) {
           // All four points found, so interpolate the value.
-          return builder.interpolate(i - fi, j - fj, g00, g10, g01, g11);
+          return bilinearInterpolateVector(i - fi, j - fj, g00, g10, g01, g11);
         }
       }
+    }
+    return null;
+  };
+
+  /**
+   * Get interpolated grid value from Lon/Lat position by nearest neighbor
+   * @param λ {Float} Longitude
+   * @param φ {Float} Latitude
+   * @param grid {2D-Array} data grid
+   * @returns {Object}
+   */
+  function interpolateNN(λ, φ, grid) {
+    if (!grid) return null;
+
+    var i = floorMod(λ - λ0, 360) / Δλ; // calculate longitude index in wrapped range [0, 360)
+    var j = (φ0 - φ) / Δφ; // calculate latitude index in direction +90 to -90
+
+    var fi = Math.round(i);
+    var fj = Math.round(j);
+
+    var row = grid[fj]
+    if (row) {
+      var g00 = row[fi]
+      if (isValue(g00)) return g00;
     }
     return null;
   };
@@ -288,7 +314,7 @@ var GradientCanvas = function(params) {
           var λ = coord[0],
             φ = coord[1];
           if (isFinite(λ)) {
-            var value = gridInterpolateFn(λ, φ);
+            var value = gridInterpolateFn(λ, φ, grid);
             for(var k=0; k<DPX; k++) column[y + k] = value;
           }
         }
@@ -388,7 +414,7 @@ var GradientCanvas = function(params) {
     start: start,
     stop: stop,
     createField: createField,
-    interpolatePoint: interpolate,
+    interpolatePoint: interpolateFn,
     setData: setData,
     setOptions: setOptions
   };
