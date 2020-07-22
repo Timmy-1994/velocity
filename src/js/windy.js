@@ -256,7 +256,7 @@ var Windy = function(params) {
    * @returns {Boolean} true if the specified value is not null and not undefined.
    */
   var isValue = function(x) {
-    return x !== null && x !== undefined;
+    return x !== null && x !== undefined && (typeof x === 'number');
   };
 
   /**

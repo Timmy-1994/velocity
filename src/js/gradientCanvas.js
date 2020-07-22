@@ -178,7 +178,7 @@ var GradientCanvas = function(params) {
    * @returns {Boolean} true if the specified value is not null and not undefined.
    */
   var isValue = function(x) {
-    return x !== null && x !== undefined;
+    return x !== null && x !== undefined && (typeof x === 'number');
   };
 
   /**
@@ -278,8 +278,6 @@ var GradientCanvas = function(params) {
     var columns = [];
     var x = bounds.x;
 
-console.log("[gradient]interpolateField", λ0, Δλ, φ0, Δφ);
-var z = 0;
     function interpolateColumn(x) {
       var w = bounds.width;
       var h = bounds.height;
@@ -291,10 +289,6 @@ var z = 0;
             φ = coord[1];
           if (isFinite(λ)) {
             var value = gridInterpolateFn(λ, φ);
-//if(y == bounds.y) console.log("[gradient]interpolateColumn", x, y, coord, value);
-if((y == 0 && x == 0) || (y >= h-2 && x == 0) || (y == 0 && x >= w-2) || (y >= h-2 && x >= w-2) ){
-	console.log("[gradient]interpolateColumn", x, y, coord, floorMod(λ - λ0, 360) / Δλ, (φ0 - φ) / Δφ, value);
-}
             for(var k=0; k<DPX; k++) column[y + k] = value;
           }
         }
@@ -307,12 +301,11 @@ if((y == 0 && x == 0) || (y >= h-2 && x == 0) || (y == 0 && x >= w-2) || (y >= h
       while (x < bounds.width) {
         interpolateColumn(x);
         x += DPX;
-        if (Date.now() - start > 1000) { // not to block too long
+        if (Date.now() - start > 500) { // not to block too long
           setTimeout(batchInterpolate, 25);
           return;
         }
       }
-console.log("[gradient]columns", columns);
       createField(columns, bounds, callback);
     })();
   };
@@ -342,7 +335,7 @@ console.log("[gradient]columns", columns);
     var px = imageData.data;
 
     var color = [0,0,0,0];
-console.log("[gradient]draw", bounds, w, h, px.length / 4, grid, columns);
+//console.log("[gradient]draw", bounds, w, h, px.length / 4, grid, columns);
     for(var i=0; i<w; i++) {
       var col = columns[i];
       for(var j=0; j<h; j++) {
@@ -380,7 +373,6 @@ console.log("[gradient]draw", bounds, w, h, px.length / 4, grid, columns);
         mapBounds,
         function(bounds, field, columns) {
           obj.field = field;
-console.log("[gradient]before draw", obj);
           draw(bounds, field, columns);
         }
       );
