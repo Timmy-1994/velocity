@@ -100,7 +100,7 @@ L.VelocityLayer = (L.Layer ? L.Layer : L.Class).extend({
     this._timer = setTimeout(function() {
       if (self._context) self._context.clearRect(0, 0, 3000, 3000);
       self._startWindy();
-      doneCb();
+      if(doneCb && typeof doneCb === 'function') doneCb();
     }, 750); // showing velocity is delayed
   },
 

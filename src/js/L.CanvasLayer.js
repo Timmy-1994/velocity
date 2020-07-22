@@ -48,11 +48,15 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
     this._canvas.height = resizeEvent.newSize.y;
   },
   //-------------------------------------------------------------
+  _setCanvasPos: function () {
+    var topLeft = this._map.containerPointToLayerPoint([0, 0]);
+    L.DomUtil.setPosition(this._canvas, topLeft);
+  },
   _onLayerDidMove: function () {
-    var _this = this;
-    this.drawLayer(function () {
-      var topLeft = _this._map.containerPointToLayerPoint([0, 0]);
-      L.DomUtil.setPosition(_this._canvas, topLeft);
+    var self = this;
+    self.drawLayer(function () {
+      self._setCanvasPos();
+      self._frame = null;
     });
   },
   //-------------------------------------------------------------
@@ -87,15 +91,17 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
 
     this.options.pane.appendChild(this._canvas);
     map.on(this.getEvents(), this);
+    this._setCanvasPos();
 
     var del = this._delegate || this;
     del.onLayerDidMount && del.onLayerDidMount(); // -- callback
-    this.needRedraw();
 
-    var self = this;
-    setTimeout(function () {
-      self._onLayerDidMove();
-    }, 0);
+    if (!this._frame) {
+      var self = this;
+      self._frame = setTimeout(function () {
+        self._onLayerDidMove();
+      }, 0);
+    }
   },
 
   //-------------------------------------------------------------
@@ -136,7 +142,7 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
         center: center,
         corner: corner
       }, null, cb);
-    this._frame = null;
+    if(!del.onDrawLayer) cb;
   },
   // -- L.DomUtil.setTransform from leaflet 1.0.0 to work on 0.0.7
   //------------------------------------------------------------------------------
