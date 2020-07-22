@@ -49,9 +49,11 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
   },
   //-------------------------------------------------------------
   _onLayerDidMove: function () {
-    var topLeft = this._map.containerPointToLayerPoint([0, 0]);
-    L.DomUtil.setPosition(this._canvas, topLeft);
-    this.drawLayer();
+    var _this = this;
+    this.drawLayer(function () {
+      var topLeft = _this._map.containerPointToLayerPoint([0, 0]);
+      L.DomUtil.setPosition(_this._canvas, topLeft);
+    });
   },
   //-------------------------------------------------------------
   getEvents: function () {
@@ -112,7 +114,7 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
   },
 
   //------------------------------------------------------------------------------
-  drawLayer: function () {
+  drawLayer: function (cb) {
     // -- todo make the viewInfo properties  flat objects.
     var size = this._map.getSize();
     var bounds = this._map.getBounds();
@@ -133,7 +135,7 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
         zoom: zoom,
         center: center,
         corner: corner
-      });
+      }, null, cb);
     this._frame = null;
   },
   // -- L.DomUtil.setTransform from leaflet 1.0.0 to work on 0.0.7

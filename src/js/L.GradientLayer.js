@@ -74,7 +74,7 @@ L.GradientLayer = (L.Layer ? L.Layer : L.Class).extend({
 
   /*------------------------------------ PRIVATE ------------------------------------------*/
 
-  onDrawLayer: function(overlay, params) {
+  onDrawLayer: function(overlay, params, doneCb) {
     var self = this;
 
     if (!this._init) {
@@ -90,6 +90,7 @@ L.GradientLayer = (L.Layer ? L.Layer : L.Class).extend({
 
     this._timer = setTimeout(function() {
       self._draw();
+      doneCb();
     }, 250); // draw data is delayed
   },
 
