@@ -37,7 +37,8 @@ var GradientCanvas = function(params) {
     "rgba(180,  0, 35, 0.8)"
   ];
 
-  const colorScale = params.colorScale || defaulColorScale;
+  var colorScale = params.colorScale || defaulColorScale;
+  var colorStyles;
 
   var interpolateFn = interpolateBI;
   if (typeof params.interpolateType === 'string') {
@@ -54,7 +55,11 @@ var GradientCanvas = function(params) {
   var λ0, φ0, Δλ, Δφ, ni, nj;
 
   var setData = function(data) {
+    grid = null;
     gridData = data;
+    buildGrid(gridData, function(out) {
+      grid = out;
+    });
   };
 
   var setOptions = function(options) {
@@ -67,6 +72,11 @@ var GradientCanvas = function(params) {
     if (options.hasOwnProperty("opacity")) OPACITY = +options.opacity;
 
     if (options.hasOwnProperty("dpx")) DPX = +options.dpx;
+
+    if (options.hasOwnProperty("colorScale")) {
+      colorScale = params.colorScale || defaulColorScale;
+      colorStyles = gradient(colorScale);
+    }
   };
 
   // interpolation for value
@@ -139,7 +149,7 @@ var GradientCanvas = function(params) {
       }
     }
 
-    callback(interpolateFn);
+    callback(grid);
   };
 
   /**
@@ -280,7 +290,8 @@ var GradientCanvas = function(params) {
         ctx.fillRect(0, 0, 1, 256);
 
         return ctx.getImageData(0, 0, 1, 256).data;
-    };
+  };
+  colorStyles = gradient(colorScale);
 
   var createField = function(columns, bounds, callback) {
     /**
@@ -337,17 +348,15 @@ var GradientCanvas = function(params) {
   };
 
   var draw = function(bounds, field, columns) {
-    var colorStyles = gradient(colorScale);
+    //var colorStyles = gradient(colorScale);
     var intensityColorScale = function (val, out) { // map value to a style
       var idx = Math.max(
         0,
         Math.min(
-          255,
-          Math.round(((val - MIN_INTENSITY) / (MAX_INTENSITY - MIN_INTENSITY)) * 255)
+          255*4,
+          Math.round(((val - MIN_INTENSITY) / (MAX_INTENSITY - MIN_INTENSITY)) * 255)*4
         )
       );
-      idx = idx * 4;
-      //return [colorStyles[idx], colorStyles[idx+1], colorStyles[idx+2], colorStyles[idx+3]];
       out[0] = colorStyles[idx + 0];
       out[1] = colorStyles[idx + 1];
       out[2] = colorStyles[idx + 2];
@@ -378,7 +387,7 @@ var GradientCanvas = function(params) {
 
 
 
-  var start = function(bounds, width, height, extent) {
+  var start = function(bounds, width, height, extent, cb) {
     var mapBounds = {
       south: deg2rad(extent[0][1]),
       north: deg2rad(extent[1][1]),
@@ -390,19 +399,33 @@ var GradientCanvas = function(params) {
 
     stop();
 
-
-    // build grid
-    buildGrid(gridData, function(gridInterpolateFn) {
+    var run = function() {
+console.time('[gradient]interpolateField')
       interpolateField(
-        gridInterpolateFn,
+        interpolateFn,
         buildBounds(bounds, width, height),
         mapBounds,
         function(bounds, field, columns) {
+console.timeEnd('[gradient]interpolateField')
+console.time('[gradient]draw')
           obj.field = field;
           draw(bounds, field, columns);
-        }
-      );
-    });
+console.timeEnd('[gradient]draw')
+          if(cb && typeof cb === 'function') cb();
+      });
+    };
+
+    if (!grid) {
+      // build grid
+console.time('[gradient]buildGrid')
+      buildGrid(gridData, function(out) {
+console.timeEnd('[gradient]buildGrid')
+        grid = out;
+        run();
+      });
+    } else {
+      run();
+    }
   };
 
   var stop = function() {

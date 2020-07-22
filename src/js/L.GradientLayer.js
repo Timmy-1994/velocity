@@ -87,10 +87,8 @@ L.GradientLayer = (L.Layer ? L.Layer : L.Class).extend({
     }
 
     if (this._timer) clearTimeout(self._timer);
-
     this._timer = setTimeout(function() {
-      self._draw();
-      doneCb();
+      self._draw(doneCb);
     }, 250); // draw data is delayed
   },
 
@@ -135,7 +133,7 @@ L.GradientLayer = (L.Layer ? L.Layer : L.Class).extend({
     if (this._init) this._draw();
   },
 
-  _draw: function() {
+  _draw: function(cb) {
     var bounds = this._map.getBounds();
     var size = this._map.getSize();
 
@@ -150,7 +148,8 @@ L.GradientLayer = (L.Layer ? L.Layer : L.Class).extend({
       [
         [bounds._southWest.lng, bounds._southWest.lat],
         [bounds._northEast.lng, bounds._northEast.lat]
-      ]
+      ],
+      cb
     );
   },
 
