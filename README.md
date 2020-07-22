@@ -10,6 +10,23 @@ Live Demo: https://danwild.github.io/leaflet-velocity/
 
 ![Screenshot](/screenshots/velocity.gif?raw=true)
 
+## performance hack for unproject
+
+```javascript
+L.CRS.scale = L.CRS.EPSG3857.scale = L.CRS.EPSG3395.scale = L.CRS.EPSG4326.scale = L.CRS.EPSG900913.scale = L.CRS.Earth.scale = function (zoom) {
+	return 256 * Math.pow(2, zoom);
+};
+
+L.CRS.Simple = function(zoom) {
+	return Math.pow(2, zoom);
+};
+```
+
+```javascript
+L.CRS.scale = L.CRS.EPSG3857.scale = L.CRS.EPSG3395.scale = L.CRS.EPSG4326.scale = L.CRS.EPSG900913.scale = L.CRS.Earth.scale = function(t) { return 1 << (t+8); };
+L.CRS.Simple = function(t) { return 1 << t; };
+```
+
 ## Example use:
 
 ```javascript
