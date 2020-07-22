@@ -11,14 +11,15 @@
  */
 
 var GradientCanvas = function(params) {
-  var MIN_INTENSITY = params.minVelocity || 0;
-  var MAX_INTENSITY = params.maxVelocity || 10;
+  var MIN_INTENSITY = params.minIntensity || 0;
+  var MAX_INTENSITY = params.maxIntensity || 10;
   var OPACITY = params.opacity || 0.97;
   var reverseX = params.reverseX || false;
   var reverseY = params.reverseY || false;
+  var DPX = params.dpx || 2;
 
   var defaulColorScale = [
-    "rgba(  0,  0,  0, 0.0)",
+    "rgba(  0,  0,  0, 0.0)", // transparent for no data
     "rgba( 36,104,180, 0.8)",
     "rgba( 60,157,194, 0.8)",
     "rgba(128,205,193, 0.8)",
@@ -49,12 +50,15 @@ var GradientCanvas = function(params) {
   };
 
   var setOptions = function(options) {
-    if (options.hasOwnProperty("minVelocity"))
-      MIN_INTENSITY = options.minVelocity;
+    if (options.hasOwnProperty("minIntensity"))
+      MIN_INTENSITY = options.minIntensity;
 
-    if (options.hasOwnProperty("maxVelocity"))
-      MAX_INTENSITY = options.maxVelocity;
+    if (options.hasOwnProperty("maxIntensity"))
+      MAX_INTENSITY = options.maxIntensity;
+
     if (options.hasOwnProperty("opacity")) OPACITY = +options.opacity;
+
+    if (options.hasOwnProperty("dpx")) DPX = +options.dpx;
   };
 
   // interpolation for value
@@ -148,7 +152,7 @@ var GradientCanvas = function(params) {
     var fj = Math.floor(j),
       cj = fj + 1;
 
-/*    var row = grid[fj]
+    /*var row = grid[fj] // nearest neighbor
     if (row) {
       var g00 = row[fi]
       if (isValue(g00)) return g00;
@@ -223,7 +227,6 @@ var GradientCanvas = function(params) {
   };
 
   var invert = function(x, y) {
-//    var latlon = params.map.layerPointToLatLng(L.point(x, y));
     var latlon = params.map.containerPointToLatLng(L.point(x, y));
     return [latlon.lng, latlon.lat];
   };
@@ -281,29 +284,29 @@ var z = 0;
       var w = bounds.width;
       var h = bounds.height;
       var column = [];
-      for (var y = bounds.y; y <= bounds.yMax; y += 2) {
+      for (var y = bounds.y; y <= bounds.yMax; y += DPX) {
         var coord = invert(x, y);
         if (coord) {
           var λ = coord[0],
             φ = coord[1];
           if (isFinite(λ)) {
-            var value = gridInterpolateFn(λ, φ); //interpolate(λ, φ);
+            var value = gridInterpolateFn(λ, φ);
 //if(y == bounds.y) console.log("[gradient]interpolateColumn", x, y, coord, value);
 if((y == 0 && x == 0) || (y >= h-2 && x == 0) || (y == 0 && x >= w-2) || (y >= h-2 && x >= w-2) ){
 	console.log("[gradient]interpolateColumn", x, y, coord, floorMod(λ - λ0, 360) / Δλ, (φ0 - φ) / Δφ, value);
 }
-            column[y + 1] = column[y] = value;
+            for(var k=0; k<DPX; k++) column[y + k] = value;
           }
         }
       }
-      columns[x + 1] = columns[x] = column;
+      for(var k=0; k<DPX; k++) columns[x + k] = column;
     }
 
     (function batchInterpolate() {
       var start = Date.now();
       while (x < bounds.width) {
         interpolateColumn(x);
-        x += 2;
+        x += DPX;
         if (Date.now() - start > 1000) { // not to block too long
           setTimeout(batchInterpolate, 25);
           return;

@@ -154,7 +154,6 @@ L.GradientLayer = (L.Layer ? L.Layer : L.Class).extend({
   },
 
   _resize: function(e) {
-console.log("[_resize]", e, this)
     var size = (e) ? e.newSize : this._map.getSize();
     this._width = size.x;
     this._height = size.y;
