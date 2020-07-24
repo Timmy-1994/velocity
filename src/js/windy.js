@@ -17,6 +17,7 @@ var Windy = function(params) {
     (params.velocityScale || 0.005) *
     (Math.pow(window.devicePixelRatio, 1 / 3) || 1); // scale for wind velocity (completely arbitrary--this value looks nice)
   var MAX_PARTICLE_AGE = params.particleAge || 90; // max number of frames a particle is drawn before regeneration
+  var MIN_PARTICLE_AGE = params.particleMinAge || 10; // min number of frames a particle is drawn before regeneration
   var PARTICLE_LINE_WIDTH = params.lineWidth || 1; // line width of a drawn particle
   var PARTICLE_MULTIPLIER = params.particleMultiplier || 1 / 300; // particle count scalar (completely arbitrary--this values looks nice)
   var PARTICLE_REDUCTION = Math.pow(window.devicePixelRatio, 1 / 3) || 1.6; // multiply particle count for mobiles by this amount
@@ -25,6 +26,7 @@ var Windy = function(params) {
   var OPACITY = params.opacity || 0.97;
   var reverseX = params.reverseX || false;
   var reverseY = params.reverseY || false;
+  var waveStyle = params.waveStyle || false; // particle color set by particle age for true, by intensity for false
 
   var defaulColorScale = [
     "rgb( 36,104,180)",
@@ -73,6 +75,9 @@ var Windy = function(params) {
     if (options.hasOwnProperty("particleAge"))
       MAX_PARTICLE_AGE = options.particleAge;
 
+    if (options.hasOwnProperty("particleMinAge"))
+      MIN_PARTICLE_AGE = options.particleMinAge;
+
     if (options.hasOwnProperty("lineWidth"))
       PARTICLE_LINE_WIDTH = options.lineWidth;
 
@@ -83,6 +88,8 @@ var Windy = function(params) {
 
     if (options.hasOwnProperty("frameRate")) FRAME_RATE = options.frameRate;
     FRAME_TIME = 1000 / FRAME_RATE;
+
+    if (options.hasOwnProperty("waveStyle")) waveStyle = options.waveStyle;
   };
 
   // interpolation for vectors like wind (u,v,m)
@@ -446,6 +453,13 @@ var Windy = function(params) {
       MIN_VELOCITY_INTENSITY,
       MAX_VELOCITY_INTENSITY
     );
+    if (waveStyle) {
+      colorStyles = windIntensityColorScale(
+        MIN_PARTICLE_AGE,
+        MAX_PARTICLE_AGE
+      );
+    }
+
     var buckets = colorStyles.map(function() {
       return [];
     });
@@ -463,7 +477,7 @@ var Windy = function(params) {
     for (var i = 0; i < particleCount; i++) {
       particles.push(
         field.randomize({
-          age: Math.floor(Math.random() * MAX_PARTICLE_AGE) + 0
+          age: Math.floor((Math.random() * (MAX_PARTICLE_AGE-MIN_PARTICLE_AGE)) + MIN_PARTICLE_AGE) + 0
         })
       );
     }
@@ -489,6 +503,7 @@ var Windy = function(params) {
             // Path from (x,y) to (xt,yt) is visible, so add this particle to the appropriate draw bucket.
             particle.xt = xt;
             particle.yt = yt;
+            if(waveStyle) m = particle.age;
             buckets[colorStyles.indexFor(m)].push(particle);
           } else {
             // Particle isn't visible, but it still moves through the field.

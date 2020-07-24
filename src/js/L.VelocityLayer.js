@@ -11,6 +11,7 @@ L.VelocityLayer = (L.Layer ? L.Layer : L.Class).extend({
     data: null,
     reverseX: false,
     reverseY: false,
+    waveStyle: false,
   },
 
   _map: null,
