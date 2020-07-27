@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+	
+	<meta charset="utf-8" />
+	<title>demo</title>
+	<meta name="viewport" content="width=device-width">
+
+<style>
+html, body {
+height: 100%;
+margin: 0;
+}
+#map {
+width: 100%;
+height: 100%;
+background:#212121;
+}
+.pane-rm {
+cursor: pointer;
+width: 100%;
+bottom: 0;
+font-size: 2em;
+color: #fff;
+background-color: #ff0000;
+text-align: center;
+margin: .3em 0;
+}
+.pane-tp {
+cursor: pointer;
+width: 100%;
+bottom: 0;
+font-size: 2em;
+color: #fff;
+background-color: #049cb1;
+text-align: center;
+margin: .3em 0;
+}
+
+.rule-body {
+font-size: 1.3em;
+}
+.contact, .otherlinks {
+font-size: 2em;
+}
+
+.leaflet-sidebar-tabs > ul > li > a.newtab {
+background-color: #dc1e1eb3;
+}
+</style>
+
+	
+</head>
+<body>
+
+<div id='map'></div>
+
+<script src="jquery-3.4.1.min.js" crossorigin=""></script>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css" integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ==" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js" integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew==" crossorigin=""></script>
+
+<!--leaflet-velocity-->
+<link rel="stylesheet" href="/leaflet-velocity.css" />
+<script src="leaflet-velocity.js"></script>
+
+<script type="text/javascript">
+// speed hack
+L.CRS.scale = L.CRS.EPSG3857.scale = L.CRS.EPSG3395.scale = L.CRS.EPSG4326.scale = L.CRS.EPSG900913.scale = L.CRS.Earth.scale = function(t) { return 1 << (t+8); };
+L.CRS.Simple = function(t) { return 1 << t; };
+
+	var initPos = {
+		lat: 23.83,
+		lng: 121.2,
+		zoom: 8,
+	}
+
+	var loc = getRequestParm('loc');
+	if(loc) {
+		var p = loc.split(',');
+		initPos.lat = p[0];
+		initPos.lng = p[1];
+		initPos.zoom = p[2];
+	}
+
+	var map = L.map('map', {
+		center: [initPos.lat, initPos.lng],
+		zoom: initPos.zoom,
+		zoomControl: false,
+		attributionControl: false,
+	});
+	L.control.zoom( {position: 'topright'} ).addTo(map);
+	L.control.scale().addTo(map);
+
+	map.on('moveend', function (e) {
+		var lat = map.getCenter().lat.toFixed(6);
+		var lng = map.getCenter().lng.toFixed(6);
+		var zoom = map.getZoom();
+		var parms = "loc=" + lat + "," + lng + "," + zoom;
+		history.replaceState(null, document.title, "?" + parms);
+	});
+
+	var baseMap = {
+		'臺灣通用電子地圖': L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', {
+			maxZoom: 18,
+			id: 'EMAP',
+		}),
+		'OSM': L.tileLayer('https://gis.sinica.edu.tw/worldmap/file-exists.php?img=OSM-png-{z}-{x}-{y}', {
+			maxZoom: 18,
+			id: 'OSM',
+		}),
+	};
+	//baseMap['臺灣通用電子地圖'].addTo(map);
+	var layerControl =L.control.layers(baseMap, {}, {
+		//collapsed: false,
+	})
+	layerControl.addTo(map);
+
+function getRequestParm(name) {
+	var re = location.search.match('[?&]'+encodeURIComponent(name)+'=([^&]*)');
+	if(re) {
+		return decodeURIComponent(re[1]);
+	}
+	return false;
+}
+
+
+//
+var velocityLayer
+//$.getJSON("https://app.cwb.gov.tw/web/cwbwifi/data/weather/minifest.json", function(minifest) {
+//	var first = minifest.data[0];
+//	var type = ['UV', 'T', 'PRES', 'TAPRECIP', 'CLOUD'];
+//	var lv = ['SFC', '1000hPa', '925hPa', '850hPa', '700hPa', '500hPa'];
+//	var path = "2020" + first + '_' + type[0] + '_' + 'SFC' + '.json'
+//	$.getJSON("https://app.cwb.gov.tw/web/cwbwifi/data/weather/" + path, function(data) {
+	$.getJSON("2020060418_UV_SFC.json", function(data) {
+console.time('parse Wind')
+		velocityLayer = L.velocityLayer({
+			displayValues: true,
+			displayOptions: {
+				velocityType: "Global Wind",
+				displayPosition: "bottomleft",
+				displayEmptyString: "No wind data"
+			},
+			angleConvention: "meteoCCW",
+			data: data,
+			reverseY: true,
+			maxVelocity: 35,
+			lineWidth: 2,
+			//colorScale: ['rgb(255,255,255)'],
+			colorScale: ['#fff'],
+		});
+		//velocityLayer.addTo(map);
+		layerControl.addOverlay(velocityLayer, "Wind - TW");
+console.timeEnd('parse Wind')
+	});
+//});
+
+var velocityLayer2
+//	$.getJSON("M-B0071-000.grid.json", function(data) {
+	$.getJSON("M-B0071-000.grid.20200722.json", function(data) {
+console.time('parse uv')
+		var uv = [
+			{
+				"header": {
+					"parameterCategory":  2,
+					"parameterNumber":   2,
+					"scanMode": 0,
+					"nx": data.nx,
+					"ny": data.ny,
+					"lo1": data.lo1,
+					"la1": data.la1,
+					"lo2": data.lo2,
+					"la2": data.la2,
+					"dx": (data.lo2 - data.lo1) / (data.nx-1),
+					"dy": (data.la1 - data.la2) / (data.ny-1),
+				},
+				"data":[]
+			},
+			{
+				"header": {
+					"parameterCategory":  2,
+					"parameterNumber":   3,
+					"scanMode": 0,
+					"nx": data.nx,
+					"ny": data.ny,
+					"lo1": data.lo1,
+					"la1": data.la1,
+					"lo2": data.lo2,
+					"la2": data.la2,
+					//"dx": 0.1,
+					//"dy": 0.1,
+					"dx": (data.lo2 - data.lo1) / (data.nx-1),
+					"dy": (data.la1 - data.la2) / (data.ny-1),
+				},
+				"data":[]
+			},
+		]
+		uv[0].data = data.d['X']
+		uv[1].data = data.d['Y']
+console.log("uv", data, uv);
+		velocityLayer2 = L.velocityLayer({
+			displayValues: true,
+			displayOptions: {
+				velocityType: "Global Wind",
+				displayPosition: "bottomleft",
+				displayEmptyString: "No wind data"
+			},
+			angleConvention: "meteoCCW",
+			data: uv,
+			reverseX: false,
+			reverseY: true,
+			maxVelocity: 35,
+			lineWidth: 10,
+			velocityScale: 0.05,
+			frameRate: 12,
+//			colorScale: ['#fff'],
+//			colorScale: ['#fff', '#07e4e6', '#0768e6', '#003269'],
+//			colorScale: ['#fff', '#0768e6'],
+//			colorScale: ['#0791ff', '#0791ff', '#0791ff', '#00000010', '#808080', '#808080'],
+			colorScale: ['#fff', '#fff', '#fff', '#00000010', '#808080'],
+			waveStyle: true,
+			//waveLastHold: 12,
+			opacity: 0.7,
+			particleAge: 48,
+			particleMinAge: 12,
+		});
+		velocityLayer2.addTo(map);
+		layerControl.addOverlay(velocityLayer2, "Flow - TW");
+console.timeEnd('parse uv')
+	});
+
+loadCSV()
+var seaflowLayer
+function loadCSV(path, name, opts) {
+	var grid = [null, null, null]; // dir, magnitude, meta
+	var wg = {
+		c: 0,
+		Add: function(num) {
+			this.c += num || 1;
+		},
+		Done: function(num) {
+			this.c -= 1;
+			if (this.c == 0) {
+				this.doneFn();
+			}
+		},
+		doneFn: function() {
+console.time('convert Flow - all')
+console.time('parse Flow - Meta')
+			var meta = parseMeta(grid[2])
+console.timeEnd('parse Flow - Meta')
+			var data = [
+				{
+					"header": {
+						"parameterCategory":  2,
+						"parameterNumber":   2,
+						"scanMode": 0,
+						"nx": meta.ny,
+						"ny": meta.nx,
+						"lo1": meta.lo1,
+						"la1": meta.la1,
+						"lo2": meta.lo2,
+						"la2": meta.la2,
+						"dx": (meta.lo2 - meta.lo1) / (meta.ny-1),
+						"dy": (meta.la1 - meta.la2) / (meta.nx-1),
+					},
+					"data":[]
+				},
+				{
+					"header": {
+						"parameterCategory":  2,
+						"parameterNumber":   3,
+						"scanMode": 0,
+						"nx": meta.ny,
+						"ny": meta.nx,
+						"lo1": meta.lo1,
+						"la1": meta.la1,
+						"lo2": meta.lo2,
+						"la2": meta.la2,
+						"dx": (meta.lo2 - meta.lo1) / (meta.ny-1),
+						"dy": (meta.la1 - meta.la2) / (meta.nx-1),
+					},
+					"data":[]
+				},
+			]
+
+console.time('convert Flow - grid')
+			var d = parseGrid(grid[0])
+			var s = parseGrid(grid[1])
+console.timeEnd('convert Flow - grid')
+console.time('convert Flow - vet')
+			var vet = phaser2vet(d, s)
+console.timeEnd('convert Flow - vet')
+			data[0].data = vet[0]
+			data[1].data = vet[1]
+
+console.timeEnd('convert Flow - all')
+console.log("data ready!", grid, meta, data, vet);
+
+			seaflowLayer = L.velocityLayer({
+				displayValues: true,
+				displayOptions: {
+					velocityType: "Global Flow",
+					displayPosition: "bottomleft",
+					displayEmptyString: "No Flow data"
+				},
+				data: data,
+				velocityScale: 0.1,
+				reverseY: true,
+				maxVelocity: 35,
+				lineWidth: 2,
+				colorScale: ['#fff'],
+			});
+			//seaflowLayer.addTo(map);
+			layerControl.addOverlay(seaflowLayer, "Sea Flow");
+		},
+	};
+
+	wg.Add(2);
+	$.ajax({
+		method: 'GET',
+		url: '2020060908.026.WD.csv',
+		dataType: 'text',
+		cache: true,
+		success: function(data, textStatus, jqXHR){
+			//console.log("data ready!", path, data);
+			var lines = data.split('\n');
+			var meta = lines.shift();
+			var transform = lines.shift();
+			var colormap = lines.shift();
+			grid[0] = lines;
+			grid[2] = meta;
+			wg.Done();
+		}
+	});
+	$.ajax({
+		method: 'GET',
+		url: '2020060908.026.WS.csv',
+		dataType: 'text',
+		cache: true,
+		success: function(data, textStatus, jqXHR){
+			//console.log("data ready!", path, data);
+			var lines = data.split('\n');
+			var meta = lines.shift();
+			var transform = lines.shift();
+			var colormap = lines.shift();
+			grid[1] = lines;
+			grid[2] = meta;
+			wg.Done();
+		}
+	});
+
+	function phaser2vet(d, s) {
+		var u = [];
+		var v = [];
+		//var count = 0;
+		const sin = Math.sin;
+		const cos = Math.cos;
+		const deg2rad = Math.PI / 180;
+		const len = (d.length < s.length)? d.length: s.length;
+		for (var i=0; i<len; i++) {
+			const vs = s[i];
+			switch(vs) {
+			case 0:
+			case NaN:
+				u.push(vs)
+				v.push(vs)
+				break
+			default:
+				const vd = d[i] * deg2rad;
+				u.push(-sin(vd) * vs);
+				v.push(-cos(vd) * vs);
+				//u[count] = -sin(vd) * vs
+				//v[count] = -cos(vd) * vs
+			}
+			//count++;
+		}
+		return [u, v];
+	}
+	function parseGrid(strArr) {
+		var out = []
+		//var count = 0;
+		for (var j=0; j<strArr.length; j++) {
+			var str = strArr[j].split(',')
+			for (var i=0; i<str.length; i++) {
+				var v = parseFloat(str[i]) || 0.0;
+				out.push(v) // slow
+				//out[count++] = v
+			}
+		}
+		return out
+	}
+	function parseMeta(str) {
+		var arr = str.split(',')
+		var out = {}
+		out.nx = parseInt(arr[1]) || 0;
+		out.ny = parseInt(arr[0]) || 0;
+		out.lo1 = parseFloat(arr[3]) || 0;
+		out.lo2 = parseFloat(arr[5]) || 0;
+		out.la1 = parseFloat(arr[6]) || 0;
+		out.la2 = parseFloat(arr[4]) || 0;
+		return out
+	}
+}
+
+loadGradient2D()
+var gradient2D
+function loadGradient2D(path, name, opts) {
+	gradient2D = new L.gradientLayer({
+		reverseX: false,
+		reverseY: true,
+		minIntensity: 14,
+		maxIntensity: 31,
+		dpx: 2,
+		//interpolateType: "NearestNeighbor",
+		colorScale: [
+			"#00000000", // transparent for no data
+
+			"#00ffd8b2", // 15-
+			"#00ffaeb2", // 15+
+			"#00ff7bb2", // 16+
+			"#00ff4cb2", // 17+
+			"#00ff14b2", // 18+
+			"#19ff00b2", // 19+
+			"#48ff00b2", // 20+
+			"#7bff00b2", // 21+
+			"#b2ff00b2", // 22+
+			"#ddff00b2", // 23+
+			"#ffee00b2", // 24+
+			"#ffbf00b2", // 25+
+			"#ff9400b2", // 26+
+			"#ff6100b2", // 27+
+			"#FF3300b2", // 28+
+			"#FF0000b2", // 29+
+			"#d30500b2", // 30+
+		],
+	});
+	//gradient2D.addTo(map);
+	layerControl.addOverlay(gradient2D, "2D - 溫度2");
+
+	$.ajax({
+		method: 'GET',
+		url: 'M-B0071-000.grid.20200722.json',
+		dataType: 'json',
+		cache: true,
+		success: function(data, textStatus, jqXHR){
+			var tmp = {
+				d: {'v': data.d['海表溫度']},
+				la1: data.la1,
+				la2: data.la2,
+				lo1: data.lo1,
+				lo2: data.lo2,
+				nx: data.nx,
+				ny: data.ny,
+			}
+			gradient2D.setData(tmp)
+			console.log("[gradient2D]2D", data, gradient2D);
+		}
+	});
+}
+
+loadGradient2D2()
+var gradient2D2
+function loadGradient2D2(path, name, opts) {
+	gradient2D2 = new L.gradientLayer({
+		reverseX: false,
+		reverseY: true,
+		minIntensity: 273,
+		maxIntensity: 273+35,
+	});
+	//gradient2D2.addTo(map);
+	layerControl.addOverlay(gradient2D2, "2D - 溫度2-2");
+
+	$.ajax({
+		method: 'GET',
+		url: '2020062318_T_SFC.json',
+		dataType: 'json',
+		cache: true,
+		success: function(data, textStatus, jqXHR){
+			var tmp = {
+				d: {'v': data[0].data},
+				la1: data[0].header.la1,
+				la2: data[0].header.la2,
+				lo1: data[0].header.lo1,
+				lo2: data[0].header.lo2,
+				nx: data[0].header.nx,
+				ny: data[0].header.ny,
+			}
+			gradient2D2.setData(tmp)
+			console.log("[gradient2D]2D2", data, gradient2D2);
+		}
+	});
+}
+loadGradient2DHS()
+var gradient2DHS
+function loadGradient2DHS(path, name, opts) {
+	gradient2DHS = new L.gradientLayer({
+		reverseX: false,
+		reverseY: true,
+		interpolateType: "NearestNeighbor",
+		dpx: 2,
+		minIntensity: 0,
+		maxIntensity: 250,
+	});
+	gradient2DHS.addTo(map);
+	layerControl.addOverlay(gradient2DHS, "2D - 浪高");
+
+	$.ajax({
+		method: 'GET',
+		url: '20072318-hs.000.grid.json',
+		dataType: 'json',
+		cache: true,
+		success: function(data, textStatus, jqXHR){
+			var tmp = {
+				d: {'v': data.d['浪高']},
+				la1: data.la1,
+				la2: data.la2,
+				lo1: data.lo1,
+				lo2: data.lo2,
+				nx: data.nx,
+				ny: data.ny,
+			}
+			gradient2DHS.setData(tmp)
+			console.log("[gradient2D]HS", data, gradient2D2);
+		}
+	});
+}
+
+loadGradientOFWRick()
+var gradientOFWRick
+function loadGradientOFWRick(path, name, opts) {
+	gradientOFWRick = new L.gradientLayer({
+		reverseX: false,
+		reverseY: true,
+		interpolateType: "NearestNeighbor",
+		dpx: 2,
+		minIntensity: 0,
+		maxIntensity: 2,
+	});
+	gradientOFWRick.addTo(map);
+	layerControl.addOverlay(gradientOFWRick, "2D - OFW Rick");
+
+	$.ajax({
+		method: 'GET',
+		url: 'OFW_risk2020070218_00H.grid.json',
+		dataType: 'json',
+		cache: true,
+		success: function(data, textStatus, jqXHR){
+			gradientOFWRick.setData(data)
+			console.log("[gradient2D]OFW Rick", data, gradient2D2);
+		}
+	});
+}
+</script>
+
+</body>
+</html>
+
