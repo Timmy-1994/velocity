@@ -27,6 +27,7 @@ var Windy = function(params) {
   var reverseX = params.reverseX || false;
   var reverseY = params.reverseY || false;
   var waveStyle = params.waveStyle || false; // particle color set by particle age for true, by intensity for false
+  var dataFn = params.dataFn || null; // function for data convert
 
   var defaulColorScale = [
     "rgb( 36,104,180)",
@@ -90,6 +91,8 @@ var Windy = function(params) {
     FRAME_TIME = 1000 / FRAME_RATE;
 
     if (options.hasOwnProperty("waveStyle")) waveStyle = options.waveStyle;
+
+    if (options.hasOwnProperty("dataFn")) dataFn = options.dataFn;
   };
 
   // interpolation for vectors like wind (u,v,m)
@@ -114,6 +117,8 @@ var Windy = function(params) {
       data: function(i) {
         return [uData[i], vData[i]];
       },
+      uData: uData,
+      vData: vData,
       interpolate: bilinearInterpolateVector
     };
   };
@@ -152,6 +157,7 @@ var Windy = function(params) {
     if (!supported) console.log("Windy Error: data must have at least two components (u,v)");
 
     builder = createBuilder(data);
+    if(dataFn && typeof dataFn === 'function') builder.data = dataFn;
     var header = builder.header;
 
     if (header.hasOwnProperty("gridDefinitionTemplate") && header.gridDefinitionTemplate != 0 ) supported = false;
@@ -193,14 +199,17 @@ var Windy = function(params) {
     var p = 0;
     var isContinuous = Math.floor(ni * Δλ) >= 360;
 
+    const uData = builder.uData;
+    const vData = builder.vData;
+
     for (var j = 0; j < nj; j++) {
       var row = [];
       for (var i = 0; i < ni; i++, p++) {
-//        row[i] = builder.data(p);
+//        row[i] = builder.data(p, uData, vData);
         if (reverseX) {
-          row.unshift(builder.data(p));
+          row.unshift(builder.data(p, uData, vData));
         } else {
-          row.push(builder.data(p));
+          row.push(builder.data(p, uData, vData));
         }
       }
       if (isContinuous) {
