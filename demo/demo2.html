@@ -552,6 +552,123 @@ function loadGradientOFWRick(path, name, opts) {
 		}
 	});
 }
+
+loadWave()
+var wave
+function loadWave(path, name, opts) {
+	var convFn = function(){
+		const sin = Math.sin
+		const cos = Math.cos
+		const DEG2RAD = Math.PI / 180
+		return function(i, uData, vData) {
+			var rad = ((uData[i]+0)%360) * DEG2RAD;
+			var l = vData[i] * 0.005;
+			var x = cos(rad) * l;
+			var y = sin(rad) * l;
+			return [x, y];
+		}
+	};
+
+	wave = new L.velocityLayer({
+		displayValues: false,
+		reverseX: false,
+		reverseY: true,
+		maxVelocity: 35,
+		lineWidth: 6,
+		velocityScale: 0.02,
+		frameRate: 12,
+		//colorScale: ['#000'],
+//		colorScale: ['#fff', '#07e4e6', '#0768e6', '#003269'],
+//		colorScale: ['#fff', '#0768e6'],
+//		colorScale: ['#0791ff', '#0791ff', '#0791ff', '#00000010', '#808080', '#808080'],
+		colorScale: ['#fff', '#fff', '#fff', '#00000010', '#808080'],
+		waveStyle: true,
+		opacity: 0.8,
+		particleAge: 48,
+		particleMinAge: 12,
+		/*dataFn: function(i, uData, vData) {
+			return [uData[i], vData[i]];
+		},*/
+		dataFn: convFn(), // pass function for convert single point
+	});
+	wave.addTo(map);
+	layerControl.addOverlay(wave, "Windy - Wave");
+
+	$.ajax({
+		method: 'GET',
+		url: '20072712.012.grid.json',
+		dataType: 'json',
+		cache: true,
+		success: function(data, textStatus, jqXHR){
+			var uv = [
+				{
+					"header": {
+						"parameterCategory":  2,
+						"parameterNumber":   2,
+						"scanMode": 0,
+						"nx": data.nx,
+						"ny": data.ny,
+						"lo1": data.lo1,
+						"la1": data.la1,
+						"lo2": data.lo2,
+						"la2": data.la2,
+						"dx": (data.lo2 - data.lo1) / (data.nx-1),
+						"dy": (data.la1 - data.la2) / (data.ny-1),
+					},
+					"data":[]
+				},
+				{
+					"header": {
+						"parameterCategory":  2,
+						"parameterNumber":   3,
+						"scanMode": 0,
+						"nx": data.nx,
+						"ny": data.ny,
+						"lo1": data.lo1,
+						"la1": data.la1,
+						"lo2": data.lo2,
+						"la2": data.la2,
+						//"dx": 0.1,
+						//"dy": 0.1,
+						"dx": (data.lo2 - data.lo1) / (data.nx-1),
+						"dy": (data.la1 - data.la2) / (data.ny-1),
+					},
+					"data":[]
+				},
+			]
+			uv[0].data = data.d['浪向'] // 0度 = 正東?, 正方向 = 逆時針?
+			uv[1].data = data.d['週期'] // '浪高'?
+
+
+/*			// covert by self
+			uv[0].data = []
+			uv[1].data = []
+			var u = uv[0].data
+			var v = uv[1].data
+
+			var dir = data.d['浪向']
+			var hs = data.d['浪高']
+			var t = data.d['週期']
+			var dirLen = dir.length
+
+			const sin = Math.sin
+			const cos = Math.cos
+			const DEG2RAD = Math.PI / 180
+			for(var i=0; i<dirLen; i++) {
+				var rad = ((dir[i]+0)%360) * DEG2RAD
+				var l = t[i] * 0.005
+				//var l = hs[i] * 0.015
+				var x = cos(rad) * l
+				var y = sin(rad) * l
+				u.push(x)
+				v.push(y)
+			}*/
+
+			wave.setData(uv)
+			console.log("[wave]data", data, uv);
+		}
+	});
+}
 </script>
 
 </body>
