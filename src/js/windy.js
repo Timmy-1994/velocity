@@ -11,6 +11,8 @@
  */
 
 var Windy = function(params) {
+	var self = this;
+
   var MIN_VELOCITY_INTENSITY = params.minVelocity || 0; // velocity at which particle intensity is minimum (m/s)
   var MAX_VELOCITY_INTENSITY = params.maxVelocity || 10; // velocity at which particle intensity is maximum (m/s)
   var VELOCITY_SCALE =
@@ -51,11 +53,9 @@ var Windy = function(params) {
 
   var NULL_WIND_VECTOR = [NaN, NaN, null]; // singleton for no wind in the form: [u, v, magnitude]
 
-  var builder;
-  var grid;
+  self.grid = null;
   var gridData = params.data;
   var date;
-  var λ0, φ0, Δλ, Δφ, ni, nj;
 
   var setData = function(data) {
     gridData = data;
@@ -95,278 +95,302 @@ var Windy = function(params) {
     if (options.hasOwnProperty("dataFn")) dataFn = options.dataFn;
   };
 
-  // interpolation for vectors like wind (u,v,m)
-  var bilinearInterpolateVector = function(x, y, g00, g10, g01, g11) {
-    var rx = 1 - x;
-    var ry = 1 - y;
-    var a = rx * ry,
-      b = x * ry,
-      c = rx * y,
-      d = x * y;
-    var u = g00[0] * a + g10[0] * b + g01[0] * c + g11[0] * d;
-    var v = g00[1] * a + g10[1] * b + g01[1] * c + g11[1] * d;
-    return [u, v, Math.sqrt(u * u + v * v)];
-  };
 
-  var createWindBuilder = function(uComp, vComp) {
-    var uData = uComp.data,
-      vData = vComp.data;
-    return {
-      header: uComp.header,
-      //recipe: recipeFor("wind-" + uComp.header.surface1Value),
-      data: function(i) {
-        return [uData[i], vData[i]];
-      },
-      uData: uData,
-      vData: vData,
-      interpolate: bilinearInterpolateVector
-    };
-  };
+	/**
+	 * @returns {Boolean} true if the specified value is not null and not undefined.
+	 */
+	var isValue = function(x) {
+		return x !== null && x !== undefined;// && !isNaN(x);
+	};
 
-  var createBuilder = function(data) {
-    var uComp = null,
-      vComp = null,
-      scalar = null;
+	/**
+	 * @returns {Number} the value x clamped to the range [low, high].
+	 */
+	var clamp = function(x, range) {
+		return Math.max(range[0], Math.min(x, range[1]));
+	};
 
-    data.forEach(function(record) {
-      switch (
-        record.header.parameterCategory +
-        "," +
-        record.header.parameterNumber
-      ) {
-        case "1,2":
-        case "2,2":
-          uComp = record;
-          break;
-        case "1,3":
-        case "2,3":
-          vComp = record;
-          break;
-        default:
-          scalar = record;
-      }
-    });
+	/**
+	 * @returns {Boolean} true if agent is probably a mobile device. Don't really care if this is accurate.
+	 */
+	var isMobile = function() {
+		return /android|blackberry|iemobile|ipad|iphone|ipod|opera mini|webos/i.test(
+			navigator.userAgent
+		);
+	};
 
-    return createWindBuilder(uComp, vComp);
-  };
+	/**
+	 * Calculate distortion of the wind vector caused by the shape of the projection at point (x, y). The wind
+	 * vector is modified in place and returned by this function.
+	 */
+	var distort = function(projection, λ, φ, x, y, scale, wind) {
+		var u = wind[0] * scale;
+		var v = wind[1] * scale;
+		var d = distortion(projection, λ, φ, x, y);
 
-  var buildGrid = function(data, callback) {
-    var supported = true;
+		// Scale distortion vectors by u and v, then add.
+		wind[0] = d[0] * u + d[2] * v;
+		wind[1] = d[1] * u + d[3] * v;
+		return wind;
+	};
 
-    if (data.length < 2 ) supported = false;
-    if (!supported) console.log("Windy Error: data must have at least two components (u,v)");
+	var distortion = function(projection, λ, φ, x, y) {
+		var τ = 2 * Math.PI;
+		var H = Math.pow(10, -5.2); // 0.00000630957344480193
+		//var H = 0.0000360;          // 0.0000360°φ ~= 4m  (from https://github.com/cambecc/earth/blob/master/public/libs/earth/1.0.0/micro.js#L13)
+		//var H = 5; // ToDo:   Why does this work?
+		var hλ = λ < 0 ? H : -H;
+		var hφ = φ < 0 ? H : -H;
 
-    builder = createBuilder(data);
-    if(dataFn && typeof dataFn === 'function') builder.data = dataFn;
-    var header = builder.header;
+		//var pλ = project(φ, λ + hλ);
+		//var pφ = project(φ + hφ, λ);
+		const pλ = mapToCanvas(λ + hλ, φ);
+		const pφ = mapToCanvas(λ, φ + hφ);
 
-    if (header.hasOwnProperty("gridDefinitionTemplate") && header.gridDefinitionTemplate != 0 ) supported = false;
-    if (!supported) {
-      console.log("Windy Error: Only data with Latitude_Longitude coordinates is supported");
-    }
-    supported = true;  // reset for futher checks
+		// Meridian scale factor (see Snyder, equation 4-3), where R = 1. This handles issue where length of 1º λ
+		// changes depending on φ. Without this, there is a pinching effect at the poles.
+		var k = Math.cos((φ / 360) * τ);
+		return [
+			(pλ[0] - x) / hλ / k,
+			(pλ[1] - y) / hλ / k,
+			(pφ[0] - x) / hφ,
+			(pφ[1] - y) / hφ
+		];
+	};
 
-    λ0 = header.lo1;
-    φ0 = header.la1; // the grid's origin (e.g., 0.0E, 90.0N)
+	/**
+	* Project a point on the map
+	* @param λ Longitude
+	* @param φ Latitude
+	* @return [x, y]
+	*/
+	var mapToCanvas = function(λ, φ) {
+		const ymin = mercY(mapBounds.south);
+		const ymax = mercY(mapBounds.north);
+		const xFactor = canvasBound.width / ( mapBounds.east - mapBounds.west );
+		const yFactor = canvasBound.height / ( ymax - ymin );
 
-    Δλ = header.dx;
-    Δφ = header.dy; // distance between grid points (e.g., 2.5 deg lon, 2.5 deg lat)
+		let y = mercY(deg2rad(φ) );
+		const x = (deg2rad(λ) - mapBounds.west) * xFactor;
+		y = (ymax - y) * yFactor;
+		return [x, y];
+	};
 
-    ni = header.nx;
-    nj = header.ny; // number of grid points W-E and N-S (e.g., 144 x 73)
+	var mercY = function(φ) {
+		return Math.log( Math.tan( φ / 2 + Math.PI / 4 ) );
+	}
 
-    if (header.hasOwnProperty("scanMode")) {
-      var scanModeMask = header.scanMode.toString(2)
-      scanModeMask = ('0'+scanModeMask).slice(-8);
-      var scanModeMaskArray = scanModeMask.split('').map(Number).map(Boolean);
+	function Header(data) {
+		var self = this;
+		self.uData;
+		self.vData;
+		self.scalar;
 
-      if (scanModeMaskArray[0]) Δλ =-Δλ;
-      if (scanModeMaskArray[1]) Δφ = -Δφ;
-      if (scanModeMaskArray[2]) supported = false;
-      if (scanModeMaskArray[3]) supported = false;
-      if (scanModeMaskArray[4]) supported = false;
-      if (scanModeMaskArray[5]) supported = false;
-      if (scanModeMaskArray[6]) supported = false;
-      if (scanModeMaskArray[7]) supported = false;
-      if (!supported) console.log("Windy Error: Data with scanMode: "+header.scanMode+ " is not supported.");
-    }
-    date = new Date(header.refTime);
-    date.setHours(date.getHours() + header.forecastTime);
+		var tmp;
+		data.forEach(function(record) {
+			switch (
+				record.header.parameterCategory +
+				"," +
+				record.header.parameterNumber
+			) {
+			case "1,2":
+			case "2,2":
+				tmp = record;
+				self.uData = record.data;
+				break;
+			case "1,3":
+			case "2,3":
+				self.vData = record.data;
+				break;
+			default:
+				self.scalar = record.data;
+			}
+		});
 
-    // Scan modes 0, 64 allowed.
-    // http://www.nco.ncep.noaa.gov/pmb/docs/grib2/grib2_table3-4.shtml
-    grid = [];
-    var p = 0;
-    var isContinuous = Math.floor(ni * Δλ) >= 360;
+		var supported = true;
 
-    const uData = builder.uData;
-    const vData = builder.vData;
+		if (data.length < 2 ) supported = false;
+		if (!supported) console.log("Windy Error: data must have at least two components (u,v)");
 
-    for (var j = 0; j < nj; j++) {
-      var row = [];
-      for (var i = 0; i < ni; i++, p++) {
-//        row[i] = builder.data(p, uData, vData);
-        if (reverseX) {
-          row.unshift(builder.data(p, uData, vData));
-        } else {
-          row.push(builder.data(p, uData, vData));
-        }
-      }
-      if (isContinuous) {
-        // For wrapped grids, duplicate first column as last column to simplify interpolation logic
-//        row.push(row[0]);
-        if (reverseX) {
-          row.unshift(row[row.length-1]);
-        } else {
-          row.push(row[0]);
-        }
-      }
-//      grid[j] = row;
-      if (reverseY) {
-        grid.unshift(row);
-      } else {
-        grid.push(row);
-      }
-    }
+		var header = tmp.header;
+		if (header.hasOwnProperty("gridDefinitionTemplate") && header.gridDefinitionTemplate != 0 ) supported = false;
+		if (!supported) {
+			console.log("Windy Error: Only data with Latitude_Longitude coordinates is supported");
+		}
+		supported = true;  // reset for futher checks
 
-    callback({
-      date: date,
-      interpolate: interpolate
-    });
-  };
+		this.λ0 = header.lo1;
+		this.φ0 = header.la1; // the grid's origin (e.g., 0.0E, 90.0N)
 
-  /**
-   * Get interpolated grid value from Lon/Lat position
-   * @param λ {Float} Longitude
-   * @param φ {Float} Latitude
-   * @returns {Object}
-   */
-  var interpolate = function(λ, φ) {
-    if (!grid) return null;
+		this.Δλ = header.dx;
+		this.Δφ = header.dy; // distance between grid points (e.g., 2.5 deg lon, 2.5 deg lat)
 
-    var i = floorMod(λ - λ0, 360) / Δλ; // calculate longitude index in wrapped range [0, 360)
-    var j = (φ0 - φ) / Δφ; // calculate latitude index in direction +90 to -90
+		this.ni = header.nx;
+		this.nj = header.ny; // number of grid points W-E and N-S (e.g., 144 x 73)
 
-    var fi = Math.floor(i),
-      ci = fi + 1;
-    var fj = Math.floor(j),
-      cj = fj + 1;
+		if (header.hasOwnProperty("scanMode")) {
+			var scanModeMask = header.scanMode.toString(2)
+			scanModeMask = ('0'+scanModeMask).slice(-8);
+			var scanModeMaskArray = scanModeMask.split('').map(Number).map(Boolean);
 
-    var row;
-    if ((row = grid[fj])) {
-      var g00 = row[fi];
-      var g10 = row[ci];
-      if (isValue(g00) && isValue(g10) && (row = grid[cj])) {
-        var g01 = row[fi];
-        var g11 = row[ci];
-        if (isValue(g01) && isValue(g11)) {
-          // All four points found, so interpolate the value.
-          return builder.interpolate(i - fi, j - fj, g00, g10, g01, g11);
-        }
-      }
-    }
-    return null;
-  };
+			if (scanModeMaskArray[0]) this.Δλ = -this.Δλ;
+			if (scanModeMaskArray[1]) this.Δφ = -this.Δφ;
+			if (scanModeMaskArray[2]) supported = false;
+			if (scanModeMaskArray[3]) supported = false;
+			if (scanModeMaskArray[4]) supported = false;
+			if (scanModeMaskArray[5]) supported = false;
+			if (scanModeMaskArray[6]) supported = false;
+			if (scanModeMaskArray[7]) supported = false;
+			if (!supported) console.log("Windy Error: Data with scanMode: "+header.scanMode+ " is not supported.");
+		}
+		this.date = new Date(header.refTime);
+		this.date.setHours(this.date.getHours() + header.forecastTime);
+	}
 
-  /**
-   * @returns {Boolean} true if the specified value is not null and not undefined.
-   */
-  var isValue = function(x) {
-    return x !== null && x !== undefined;
-  };
+	Header.prototype.data = function(i, uData, vData) {
+		return [this.uData[i], this.vData[i]];
+	}
 
-  /**
-   * @returns {Number} returns remainder of floored division, i.e., floor(a / n). Useful for consistent modulo
-   *          of negative numbers. See http://en.wikipedia.org/wiki/Modulo_operation.
-   */
-  var floorMod = function(a, n) {
-    return a - n * Math.floor(a / n);
-  };
 
-  /**
-   * @returns {Number} the value x clamped to the range [low, high].
-   */
-  var clamp = function(x, range) {
-    return Math.max(range[0], Math.min(x, range[1]));
-  };
+	function Grid(header, canvasBound, mapBounds, callback) {
+		this.header = header;
+		this.bounds = canvasBound;
+		this.grid = [];
 
-  /**
-   * @returns {Boolean} true if agent is probably a mobile device. Don't really care if this is accurate.
-   */
-  var isMobile = function() {
-    return /android|blackberry|iemobile|ipad|iphone|ipod|opera mini|webos/i.test(
-      navigator.userAgent
-    );
-  };
+		this.λ0 = header.λ0;
+		this.φ0 = header.φ0; // the grid's origin (e.g., 0.0E, 90.0N)
 
-  /**
-   * Calculate distortion of the wind vector caused by the shape of the projection at point (x, y). The wind
-   * vector is modified in place and returned by this function.
-   */
-  var distort = function(projection, λ, φ, x, y, scale, wind) {
-    var u = wind[0] * scale;
-    var v = wind[1] * scale;
-    var d = distortion(projection, λ, φ, x, y);
+		this.Δλ = header.Δλ;
+		this.Δφ = header.Δφ; // distance between grid points (e.g., 2.5 deg lon, 2.5 deg lat)
 
-    // Scale distortion vectors by u and v, then add.
-    wind[0] = d[0] * u + d[2] * v;
-    wind[1] = d[1] * u + d[3] * v;
-    return wind;
-  };
+		this.ni = header.ni;
+		this.nj = header.nj; // number of grid points W-E and N-S (e.g., 144 x 73)
 
-  var distortion = function(projection, λ, φ, x, y) {
-    var τ = 2 * Math.PI;
-    //    var H = Math.pow(10, -5.2); // 0.00000630957344480193
-    //    var H = 0.0000360;          // 0.0000360°φ ~= 4m  (from https://github.com/cambecc/earth/blob/master/public/libs/earth/1.0.0/micro.js#L13)
-    var H = 5; // ToDo:   Why does this work?
-    var hλ = λ < 0 ? H : -H;
-    var hφ = φ < 0 ? H : -H;
+		var ni = header.ni;
+		var nj = header.nj;
 
-    var pλ = project(φ, λ + hλ);
-    var pφ = project(φ + hφ, λ);
+		var grid = this.grid;
+		var p = 0;
+		var isContinuous = Math.floor(ni * this.Δλ) >= 360;
 
-    // Meridian scale factor (see Snyder, equation 4-3), where R = 1. This handles issue where length of 1º λ
-    // changes depending on φ. Without this, there is a pinching effect at the poles.
-    var k = Math.cos((φ / 360) * τ);
-    return [
-      (pλ[0] - x) / hλ / k,
-      (pλ[1] - y) / hλ / k,
-      (pφ[0] - x) / hφ,
-      (pφ[1] - y) / hφ
-    ];
-  };
+		const uData = header.uData;
+		const vData = header.vData;
 
-  var createField = function(columns, bounds, callback) {
-    /**
-     * @returns {Array} wind vector [u, v, magnitude] at the point (x, y), or [NaN, NaN, null] if wind
-     *          is undefined at that point.
-     */
-    function field(x, y) {
-      var column = columns[Math.round(x)];
-      return (column && column[Math.round(y)]) || NULL_WIND_VECTOR;
-    }
+		for (var j = 0; j < nj; j++) {
+			var row = [];
+			for (var i = 0; i < ni; i++, p++) {
+				//if (reverseX) {
+				//	row.unshift(builder.data(p, uData, vData));
+				//} else {
+					row.push(header.data(p, uData, vData));
+					//var v = [uData[p], vData[p]];
+					//row.push(v);
+				//}
+			}
+			if (isContinuous) {
+				// For wrapped grids, duplicate first column as last column to simplify interpolation logic
+				//if (reverseX) {
+				//	row.unshift(row[row.length-1]);
+				//} else {
+					row.push(row[0]);
+				//}
+			}
+			//if (reverseY) {
+				grid.unshift(row);
+			//} else {
+			//	grid.push(row);
+			//}
+		}
 
-    // Frees the massive "columns" array for GC. Without this, the array is leaked (in Chrome) each time a new
-    // field is interpolated because the field closure's context is leaked, for reasons that defy explanation.
-    field.release = function() {
-      columns = [];
-    };
+		callback(this);
+	}
+	Grid.prototype.release = function() {
+		this.grid = null;
+		this.header = null;
+	}
 
-    field.randomize = function(o) {
-      // UNDONE: this method is terrible
-      var x, y;
-      var safetyNet = 0;
-      do {
-        x = Math.round(Math.floor(Math.random() * bounds.width) + bounds.x);
-        y = Math.round(Math.floor(Math.random() * bounds.height) + bounds.y);
-      } while (field(x, y)[2] === null && safetyNet++ < 30);
-      o.x = x;
-      o.y = y;
-      return o;
-    };
+	Grid.prototype.get = function(x, y) {
+		var row = this.grid[Math.round(x)];
+		return (row && row[Math.round(y)]) || NULL_WIND_VECTOR;
+	}
 
-    callback(bounds, field);
-  };
+	Grid.prototype.interpolate = function(λ, φ) {
+		if (!this.grid) return null;
+
+		var i = this.floorMod(λ - this.λ0, 360) / this.Δλ; // calculate longitude index in wrapped range [0, 360)
+		var j = (this.φ0 - φ) / this.Δφ; // calculate latitude index in direction +90 to -90
+
+		var fi = Math.floor(i),
+			ci = fi + 1;
+		var fj = Math.floor(j),
+			cj = fj + 1;
+
+		var grid = this.grid;
+		var row;
+		if ((row = grid[fj])) {
+			var g00 = row[fi];
+			var g10 = row[ci];
+			if (isValue(g00) && isValue(g10) && (row = grid[cj])) {
+				var g01 = row[fi];
+				var g11 = row[ci];
+				if (isValue(g01) && isValue(g11)) {
+					// All four points found, so interpolate the value.
+					return this.bilinearInterpolateVector(i - fi, j - fj, g00, g10, g01, g11);
+				}
+			}
+		}
+		return null;
+	};
+
+	Grid.prototype.bilinearInterpolateVector = function(x, y, g00, g10, g01, g11) {
+		var rx = 1 - x;
+		var ry = 1 - y;
+		var a = rx * ry,
+		b = x * ry,
+		c = rx * y,
+		d = x * y;
+		var u = g00[0] * a + g10[0] * b + g01[0] * c + g11[0] * d;
+		var v = g00[1] * a + g10[1] * b + g01[1] * c + g11[1] * d;
+		return [u, v, Math.sqrt(u * u + v * v)];
+	}
+
+	/**
+	 * @returns {Number} returns remainder of floored division, i.e., floor(a / n). Useful for consistent modulo
+	 *          of negative numbers. See http://en.wikipedia.org/wiki/Modulo_operation.
+	 */
+	Grid.prototype.floorMod = function(a, n) {
+		return a - n * Math.floor(a / n);
+	};
+
+	Grid.prototype.randomize = function(p) {
+		// UNDONE: this method is terrible
+		var x, y;
+		var bounds = this.bounds;
+		var v;
+		var safetyNet = 0;
+		do {
+			x = Math.round(Math.floor(Math.random() * bounds.width) + bounds.x);
+			y = Math.round(Math.floor(Math.random() * bounds.height) + bounds.y);
+			v = this.interpolate(x, y);
+		} while ((v === null || v[2] === null) && safetyNet++ < 30);
+		p.x = x;
+		p.y = y;
+		return p;
+	};
+
+	function Particule() {
+		this.x;
+		this.y;
+		this.age;
+		//this.maxAge;
+
+		this.xt;
+		this.yt;
+		this.intensity;
+	}
+	Particule.prototype.maxAge = MAX_PARTICLE_AGE;
+
+
 
   var buildBounds = function(bounds, width, height) {
     var upperLeft = bounds[0];
@@ -399,221 +423,191 @@ var Windy = function(params) {
     return [xy.x, xy.y];
   };
 
-  var interpolateField = function(grid, bounds, extent, callback) {
-    var projection = {}; // map.crs used instead
-    var mapArea = (extent.south - extent.north) * (extent.west - extent.east);
-    var velocityScale = VELOCITY_SCALE * Math.pow(mapArea, 0.4);
+	var context2D; // cache params.canvas.getContext("2d");
+	var mapBounds;
+	var canvasBound;
+	var colorStyles; // for runtime
+	var buckets; // for runtime
+	var particles; // for runtime
 
-    var columns = [];
-    var x = bounds.x;
 
-    function interpolateColumn(x) {
-      var column = [];
-      for (var y = bounds.y; y <= bounds.yMax; y += 2) {
-        var coord = invert(x, y);
-        if (coord) {
-          var λ = coord[0],
-            φ = coord[1];
-          if (isFinite(λ)) {
-            var wind = grid.interpolate(λ, φ);
-            if (wind) {
-              wind = distort(projection, λ, φ, x, y, velocityScale, wind);
-              column[y + 1] = column[y] = wind;
-            }
-          }
-        }
-      }
-      columns[x + 1] = columns[x] = column;
-    }
+	var animate = function(grid2) {
+		var grid = self.grid || grid2;
+		self.grid = grid;
+		var particleCount = Math.round(
+			canvasBound.width * canvasBound.height * PARTICLE_MULTIPLIER
+		);
+		if (isMobile()) {
+			particleCount *= PARTICLE_REDUCTION;
+		}
 
-    (function batchInterpolate() {
-      var start = Date.now();
-      while (x < bounds.width) {
-        interpolateColumn(x);
-        x += 2;
-        if (Date.now() - start > 1000) {
-          //MAX_TASK_TIME) {
-          setTimeout(batchInterpolate, 25);
-          return;
-        }
-      }
-      createField(columns, bounds, callback);
-    })();
-  };
+		particles = [];
+		for (var i = 0; i < particleCount; i++) {
+			particles.push(
+				grid.randomize({
+					age: Math.floor((Math.random() * (MAX_PARTICLE_AGE-MIN_PARTICLE_AGE)) + MIN_PARTICLE_AGE) + 0
+				})
+			);
+		}
 
-  var animationLoop;
-  var animate = function(bounds, field) {
-    function windIntensityColorScale(min, max) {
-      colorScale.indexFor = function(m) {
-        // map velocity speed to a style
-        return Math.max(
-          0,
-          Math.min(
-            colorScale.length - 1,
-            Math.round(((m - min) / (max - min)) * (colorScale.length - 1))
-          )
-        );
-      };
+		frame();
+	};
 
-      return colorScale;
-    }
+	function evolve() {
+		var projection = {}; // map.crs used instead
+		var mapArea = (mapBounds.south - mapBounds.north) * (mapBounds.west - mapBounds.east);
+		var velocityScale = VELOCITY_SCALE * Math.pow(mapArea, 0.4);
 
-    var colorStyles = windIntensityColorScale(
-      MIN_VELOCITY_INTENSITY,
-      MAX_VELOCITY_INTENSITY
-    );
-    if (waveStyle) {
-      colorStyles = windIntensityColorScale(
-        MIN_PARTICLE_AGE,
-        MAX_PARTICLE_AGE
-      );
-    }
+		buckets.forEach(function(bucket) {
+			bucket.length = 0;
+		});
 
-    var buckets = colorStyles.map(function() {
-      return [];
-    });
+		particles.forEach(function(particle) {
+			if (particle.age > MAX_PARTICLE_AGE) {
+				self.grid.randomize(particle).age = 0;
+			}
 
-    var particleCount = Math.round(
-      bounds.width * bounds.height * PARTICLE_MULTIPLIER
-    );
-    if (isMobile()) {
-      particleCount *= PARTICLE_REDUCTION;
-    }
+			var x = particle.x;
+			var y = particle.y;
+			var coord = invert(x, y);
+			var λ = coord[0];
+			var φ = coord[1];
+			var v = self.grid.interpolate(λ, φ); // vector at current position
+			if (v) {
+				v = distort(projection, λ, φ, x, y, velocityScale, v);
+				var m = v[2];
+				if (m === null || m == 0) {
+					particle.age = MAX_PARTICLE_AGE; // particle has escaped the grid, never to return...
+				} else {
+//console.log(self, x, y, v)
+					var xt = x + v[0];
+					var yt = y + v[1];
 
-    var fadeFillStyle = `rgba(0, 0, 0, ${OPACITY})`;
+					// Path from (x,y) to (xt,yt) is visible, so add this particle to the appropriate draw bucket.
+					particle.xt = xt;
+					particle.yt = yt;
+					if(waveStyle) m = particle.age;
+					buckets[colorStyles.indexFor(m)].push(particle);
+				}
+			}
+			particle.age += 1;
+		});
+	}
 
-    var particles = [];
-    for (var i = 0; i < particleCount; i++) {
-      particles.push(
-        field.randomize({
-          age: Math.floor((Math.random() * (MAX_PARTICLE_AGE-MIN_PARTICLE_AGE)) + MIN_PARTICLE_AGE) + 0
-        })
-      );
-    }
+	var draw = function (g) {
+		// Fade existing particle trails.
+		var prev = "lighter";
+		g.globalCompositeOperation = "destination-in";
+		g.fillRect(canvasBound.x, canvasBound.y, canvasBound.width, canvasBound.height);
+		g.globalCompositeOperation = prev;
+		g.globalAlpha = OPACITY === 0 ? 0 : OPACITY * 0.9;
 
-    function evolve() {
-      buckets.forEach(function(bucket) {
-        bucket.length = 0;
-      });
-      particles.forEach(function(particle) {
-        if (particle.age > MAX_PARTICLE_AGE) {
-          field.randomize(particle).age = 0;
-        }
-        var x = particle.x;
-        var y = particle.y;
-        var v = field(x, y); // vector at current position
-        var m = v[2];
-        if (m === null) {
-          particle.age = MAX_PARTICLE_AGE; // particle has escaped the grid, never to return...
-        } else {
-          var xt = x + v[0];
-          var yt = y + v[1];
-          if (field(xt, yt)[2] !== null) {
-            // Path from (x,y) to (xt,yt) is visible, so add this particle to the appropriate draw bucket.
-            particle.xt = xt;
-            particle.yt = yt;
-            if(waveStyle) m = particle.age;
-            buckets[colorStyles.indexFor(m)].push(particle);
-          } else {
-            // Particle isn't visible, but it still moves through the field.
-            particle.x = xt;
-            particle.y = yt;
-          }
-        }
-        particle.age += 1;
-      });
-    }
+		// Draw new particle trails.
+		buckets.forEach(function(bucket, i) {
+			if (bucket.length > 0) {
+				g.beginPath();
+				g.strokeStyle = colorStyles[i];
+				bucket.forEach(function(particle) {
+					g.moveTo(particle.x, particle.y);
+					g.lineTo(particle.xt, particle.yt);
+					particle.x = particle.xt;
+					particle.y = particle.yt;
+				});
+				g.stroke();
+			}
+		});
+	}
 
-    var g = params.canvas.getContext("2d");
-    g.lineWidth = PARTICLE_LINE_WIDTH;
-    g.fillStyle = fadeFillStyle;
-    g.globalAlpha = 0.6;
+	var animationLoop;
+	var then = Date.now();
+	var frame = function () {
+		animationLoop = requestAnimationFrame(frame);
+		var now = Date.now();
+		var delta = now - then;
+		if (delta > FRAME_TIME) {
+			then = now - (delta % FRAME_TIME);
+			evolve();
+			draw(context2D);
+		}
+	};
 
-    function draw() {
-      // Fade existing particle trails.
-      var prev = "lighter";
-      g.globalCompositeOperation = "destination-in";
-      g.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-      g.globalCompositeOperation = prev;
-      g.globalAlpha = OPACITY === 0 ? 0 : OPACITY * 0.9;
+	var start = function(bounds, width, height, extent) {
+		mapBounds = {
+			south: deg2rad(extent[0][1]),
+			north: deg2rad(extent[1][1]),
+			east: deg2rad(extent[1][0]),
+			west: deg2rad(extent[0][0]),
+			width: width,
+			height: height
+		};
 
-      // Draw new particle trails.
-      buckets.forEach(function(bucket, i) {
-        if (bucket.length > 0) {
-          g.beginPath();
-          g.strokeStyle = colorStyles[i];
-          bucket.forEach(function(particle) {
-            g.moveTo(particle.x, particle.y);
-            g.lineTo(particle.xt, particle.yt);
-            particle.x = particle.xt;
-            particle.y = particle.yt;
-          });
-          g.stroke();
-        }
-      });
-    }
+		stop();
 
-    var then = Date.now();
-    (function frame() {
-      animationLoop = requestAnimationFrame(frame);
-      var now = Date.now();
-      var delta = now - then;
-      if (delta > FRAME_TIME) {
-        then = now - (delta % FRAME_TIME);
-        evolve();
-        draw();
-      }
-    })();
-  };
+		function windIntensityColorScale(min, max) {
+			colorScale.indexFor = function(m) {
+				// map velocity speed to a style
+				return Math.max(
+					0,
+					Math.min(
+						colorScale.length - 1,
+						Math.round(((m - min) / (max - min)) * (colorScale.length - 1))
+					)
+				);
+			};
 
-  var start = function(bounds, width, height, extent) {
-    var mapBounds = {
-      south: deg2rad(extent[0][1]),
-      north: deg2rad(extent[1][1]),
-      east: deg2rad(extent[1][0]),
-      west: deg2rad(extent[0][0]),
-      width: width,
-      height: height
-    };
+			return colorScale;
+		}
 
-    stop();
+		colorStyles = windIntensityColorScale(
+			MIN_VELOCITY_INTENSITY,
+			MAX_VELOCITY_INTENSITY
+		);
+		if (waveStyle) {
+			colorStyles = windIntensityColorScale(
+				MIN_PARTICLE_AGE,
+				MAX_PARTICLE_AGE
+			);
+		}
 
-    // build grid
-    buildGrid(gridData, function(grid) {
-      // interpolateField
-      interpolateField(
-        grid,
-        buildBounds(bounds, width, height),
-        mapBounds,
-        function(bounds, field) {
-          // animate the canvas with random points
-          windy.field = field;
-          animate(bounds, field);
-        }
-      );
-    });
-  };
+		buckets = colorStyles.map(function() {
+			return [];
+		});
 
-  var stop = function() {
-    if (windy.field) windy.field.release();
-    if (animationLoop) cancelAnimationFrame(animationLoop);
-  };
+		var fadeFillStyle = `rgba(0, 0, 0, ${OPACITY})`;
+		context2D = params.canvas.getContext("2d");
+		context2D.lineWidth = PARTICLE_LINE_WIDTH;
+		context2D.fillStyle = fadeFillStyle;
+		context2D.globalAlpha = 0.6;
 
-  var windy = {
-    params: params,
-    start: start,
-    stop: stop,
-    createField: createField,
-    interpolatePoint: interpolate,
-    setData: setData,
-    setOptions: setOptions
-  };
+		canvasBound = buildBounds(bounds, width, height);
 
-  return windy;
+		// build grid
+		var header = new Header(gridData);
+		if(dataFn && typeof dataFn === 'function') header.data = dataFn;
+
+		new Grid(header, canvasBound, mapBounds, function(grid) {
+			self.grid = grid;
+			animate(grid);
+		})
+		//frame();
+	};
+
+	var stop = function() {
+		//if (self.grid) self.grid.release();
+		if (animationLoop) L.Util.cancelAnimFrame(animationLoop);
+	};
+
+	self.params = params;
+	self.start = start;
+	self.stop = stop;
+	self.draw = draw;
+	self.setData = setData;
+	self.setOptions = setOptions;
+
+	return self;
 };
 
-if (!window.cancelAnimationFrame) {
-  window.cancelAnimationFrame = function(id) {
-    clearTimeout(id);
-  };
-}
+
+
+
+

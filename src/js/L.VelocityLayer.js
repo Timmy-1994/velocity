@@ -96,16 +96,16 @@ L.VelocityLayer = (L.Layer ? L.Layer : L.Class).extend({
       return;
     }
 
-    if (this._timer) clearTimeout(self._timer);
+    if (this._timer) L.Util.cancelAnimFrame(self._timer);
+    this._timer = L.Util.requestAnimFrame(this._clearAndRestart, this);
 
-    this._timer = setTimeout(function() {
-      if (self._context) self._context.clearRect(0, 0, 3000, 3000);
-      self._startWindy();
-      if(doneCb && typeof doneCb === 'function') doneCb();
-    }, 750); // showing velocity is delayed
+    if(doneCb && typeof doneCb === 'function') doneCb();
   },
 
   _startWindy: function() {
+    //var topLeft = this._map.containerPointToLayerPoint([0, 0]);
+    //L.DomUtil.setPosition(this._canvasLayer._canvas, topLeft);
+
     var bounds = this._map.getBounds();
     var size = this._map.getSize();
 
@@ -124,6 +124,16 @@ L.VelocityLayer = (L.Layer ? L.Layer : L.Class).extend({
     );
   },
 
+  getEvents: function(){
+      return {
+        dragstart:this._clearWind,
+        //dragend:this._clearAndRestart,
+        zoomstart:this._clearWind,
+        //zoomend:this._clearAndRestart,
+        //resize:this._clearAndRestart
+      }
+  },
+
   _initWindy: function(self) {
     // windy object, copy options
     const options = Object.assign(
@@ -137,11 +147,13 @@ L.VelocityLayer = (L.Layer ? L.Layer : L.Class).extend({
     this._canvasLayer._canvas.classList.add("velocity-overlay");
     this.onDrawLayer();
 
-    this._map.on("dragstart", self._windy.stop);
+    this._map.on(this.getEvents(),this)
+
+/*    this._map.on("dragstart", self._windy.stop);
     this._map.on("dragend", self._clearAndRestart);
     this._map.on("zoomstart", self._windy.stop);
     this._map.on("zoomend", self._clearAndRestart);
-    this._map.on("resize", self._clearWind);
+    this._map.on("resize", self._clearWind);*/
 
     this._initMouseHandler(false);
   },
@@ -158,12 +170,14 @@ L.VelocityLayer = (L.Layer ? L.Layer : L.Class).extend({
     }
   },
 
-  _clearAndRestart: function() {
+  _clearAndRestart: function(e) {
+console.log("[windy]", e);
     if (this._context) this._context.clearRect(0, 0, 3000, 3000);
     if (this._windy) this._startWindy();
   },
 
-  _clearWind: function() {
+  _clearWind: function(e) {
+console.log("[windy]", e);
     if (this._windy) this._windy.stop();
     if (this._context) this._context.clearRect(0, 0, 3000, 3000);
   },

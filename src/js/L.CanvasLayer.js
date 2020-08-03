@@ -52,7 +52,8 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
     var topLeft = this._map.containerPointToLayerPoint([0, 0]);
     L.DomUtil.setPosition(this._canvas, topLeft);
   },
-  _onLayerDidMove: function () {
+  _onLayerDidMove: function (e) {
+console.log("[canvas]", e);
     var self = this;
     self.drawLayer(function () {
       self._setCanvasPos();
@@ -63,7 +64,8 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
   getEvents: function () {
     var events = {
       resize: this._onLayerDidResize,
-      moveend: this._onLayerDidMove
+      moveend: this._onLayerDidMove,
+//      dragend: this._onLayerDidMove,
     };
     if (this._map.options.zoomAnimation && L.Browser.any3d) {
       events.zoomanim = this._animateZoom;
@@ -96,12 +98,13 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
     var del = this._delegate || this;
     del.onLayerDidMount && del.onLayerDidMount(); // -- callback
 
-    if (!this._frame) {
+    this.needRedraw();
+/*    if (!this._frame) {
       var self = this;
       self._frame = setTimeout(function () {
         self._onLayerDidMove();
       }, 0);
-    }
+    }*/
   },
 
   //-------------------------------------------------------------
