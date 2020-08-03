@@ -13,87 +13,87 @@
 var Windy = function(params) {
 	var self = this;
 
-  var MIN_VELOCITY_INTENSITY = params.minVelocity || 0; // velocity at which particle intensity is minimum (m/s)
-  var MAX_VELOCITY_INTENSITY = params.maxVelocity || 10; // velocity at which particle intensity is maximum (m/s)
-  var VELOCITY_SCALE =
-    (params.velocityScale || 0.005) *
-    (Math.pow(window.devicePixelRatio, 1 / 3) || 1); // scale for wind velocity (completely arbitrary--this value looks nice)
-  var MAX_PARTICLE_AGE = params.particleAge || 90; // max number of frames a particle is drawn before regeneration
-  var MIN_PARTICLE_AGE = params.particleMinAge || 10; // min number of frames a particle is drawn before regeneration
-  var PARTICLE_LINE_WIDTH = params.lineWidth || 1; // line width of a drawn particle
-  var PARTICLE_MULTIPLIER = params.particleMultiplier || 1 / 300; // particle count scalar (completely arbitrary--this values looks nice)
-  var PARTICLE_REDUCTION = Math.pow(window.devicePixelRatio, 1 / 3) || 1.6; // multiply particle count for mobiles by this amount
-  var FRAME_RATE = params.frameRate || 15;
-  var FRAME_TIME = 1000 / FRAME_RATE; // desired frames per second
-  var OPACITY = params.opacity || 0.97;
-  var reverseX = params.reverseX || false;
-  var reverseY = params.reverseY || false;
-  var waveStyle = params.waveStyle || false; // particle color set by particle age for true, by intensity for false
-  var dataFn = params.dataFn || null; // function for data convert
+	var MIN_VELOCITY_INTENSITY = params.minVelocity || 0; // velocity at which particle intensity is minimum (m/s)
+	var MAX_VELOCITY_INTENSITY = params.maxVelocity || 10; // velocity at which particle intensity is maximum (m/s)
+	var VELOCITY_SCALE =
+		(params.velocityScale || 0.005) *
+		(Math.pow(window.devicePixelRatio, 1 / 3) || 1); // scale for wind velocity (completely arbitrary--this value looks nice)
+	var MAX_PARTICLE_AGE = params.particleAge || 90; // max number of frames a particle is drawn before regeneration
+	var MIN_PARTICLE_AGE = params.particleMinAge || 10; // min number of frames a particle is drawn before regeneration
+	var PARTICLE_LINE_WIDTH = params.lineWidth || 1; // line width of a drawn particle
+	var PARTICLE_MULTIPLIER = params.particleMultiplier || 1 / 300; // particle count scalar (completely arbitrary--this values looks nice)
+	var PARTICLE_REDUCTION = Math.pow(window.devicePixelRatio, 1 / 3) || 1.6; // multiply particle count for mobiles by this amount
+	var FRAME_RATE = params.frameRate || 15;
+	var FRAME_TIME = 1000 / FRAME_RATE; // desired frames per second
+	var OPACITY = params.opacity || 0.97;
+	var reverseX = params.reverseX || false;
+	var reverseY = params.reverseY || false;
+	var waveStyle = params.waveStyle || false; // particle color set by particle age for true, by intensity for false
+	var dataFn = params.dataFn || null; // function for data convert
 
-  var defaulColorScale = [
-    "rgb( 36,104,180)",
-    "rgb( 60,157,194)",
-    "rgb(128,205,193)",
-    "rgb(151,218,168)",
-    "rgb(198,231,181)",
-    "rgb(238,247,217)",
-    "rgb(255,238,159)",
-    "rgb(252,217,125)",
-    "rgb(255,182,100)",
-    "rgb(252,150, 75)",
-    "rgb(250,112, 52)",
-    "rgb(245, 64, 32)",
-    "rgb(237, 45, 28)",
-    "rgb(220, 24, 32)",
-    "rgb(180,  0, 35)"
-  ];
+	var defaulColorScale = [
+		"rgb( 36,104,180)",
+		"rgb( 60,157,194)",
+		"rgb(128,205,193)",
+		"rgb(151,218,168)",
+		"rgb(198,231,181)",
+		"rgb(238,247,217)",
+		"rgb(255,238,159)",
+		"rgb(252,217,125)",
+		"rgb(255,182,100)",
+		"rgb(252,150, 75)",
+		"rgb(250,112, 52)",
+		"rgb(245, 64, 32)",
+		"rgb(237, 45, 28)",
+		"rgb(220, 24, 32)",
+		"rgb(180,  0, 35)"
+	];
 
-  const colorScale = params.colorScale || defaulColorScale;
+	const colorScale = params.colorScale || defaulColorScale;
 
-  var NULL_WIND_VECTOR = [NaN, NaN, null]; // singleton for no wind in the form: [u, v, magnitude]
+	var NULL_WIND_VECTOR = [NaN, NaN, null]; // singleton for no wind in the form: [u, v, magnitude]
 
-  self.grid = null;
-  var gridData = params.data;
-  var date;
+	self.grid = null;
+	var gridData = params.data;
+	var date;
 
-  var setData = function(data) {
-    gridData = data;
-  };
+	var setData = function(data) {
+		gridData = data;
+	};
 
-  var setOptions = function(options) {
-    if (options.hasOwnProperty("minVelocity"))
-      MIN_VELOCITY_INTENSITY = options.minVelocity;
+	var setOptions = function(options) {
+		if (options.hasOwnProperty("minVelocity"))
+			MIN_VELOCITY_INTENSITY = options.minVelocity;
 
-    if (options.hasOwnProperty("maxVelocity"))
-      MAX_VELOCITY_INTENSITY = options.maxVelocity;
+		if (options.hasOwnProperty("maxVelocity"))
+			MAX_VELOCITY_INTENSITY = options.maxVelocity;
 
-    if (options.hasOwnProperty("velocityScale"))
-      VELOCITY_SCALE =
-        (options.velocityScale || 0.005) *
-        (Math.pow(window.devicePixelRatio, 1 / 3) || 1);
+		if (options.hasOwnProperty("velocityScale"))
+			VELOCITY_SCALE =
+			(options.velocityScale || 0.005) *
+			(Math.pow(window.devicePixelRatio, 1 / 3) || 1);
 
-    if (options.hasOwnProperty("particleAge"))
-      MAX_PARTICLE_AGE = options.particleAge;
+		if (options.hasOwnProperty("particleAge"))
+			MAX_PARTICLE_AGE = options.particleAge;
 
-    if (options.hasOwnProperty("particleMinAge"))
-      MIN_PARTICLE_AGE = options.particleMinAge;
+		if (options.hasOwnProperty("particleMinAge"))
+			MIN_PARTICLE_AGE = options.particleMinAge;
 
-    if (options.hasOwnProperty("lineWidth"))
-      PARTICLE_LINE_WIDTH = options.lineWidth;
+		if (options.hasOwnProperty("lineWidth"))
+			PARTICLE_LINE_WIDTH = options.lineWidth;
 
-    if (options.hasOwnProperty("particleMultiplier"))
-      PARTICLE_MULTIPLIER = options.particleMultiplier;
+		if (options.hasOwnProperty("particleMultiplier"))
+			PARTICLE_MULTIPLIER = options.particleMultiplier;
 
-    if (options.hasOwnProperty("opacity")) OPACITY = +options.opacity;
+		if (options.hasOwnProperty("opacity")) OPACITY = +options.opacity;
 
-    if (options.hasOwnProperty("frameRate")) FRAME_RATE = options.frameRate;
-    FRAME_TIME = 1000 / FRAME_RATE;
+		if (options.hasOwnProperty("frameRate")) FRAME_RATE = options.frameRate;
+			FRAME_TIME = 1000 / FRAME_RATE;
 
-    if (options.hasOwnProperty("waveStyle")) waveStyle = options.waveStyle;
+		if (options.hasOwnProperty("waveStyle")) waveStyle = options.waveStyle;
 
-    if (options.hasOwnProperty("dataFn")) dataFn = options.dataFn;
-  };
+		if (options.hasOwnProperty("dataFn")) dataFn = options.dataFn;
+	};
 
 
 	/**
@@ -255,7 +255,7 @@ var Windy = function(params) {
 	function Grid(header, canvasBound, mapBounds, callback) {
 		this.header = header;
 		this.bounds = canvasBound;
-		this.grid = [];
+		this.grid = null;
 
 		this.λ0 = header.λ0;
 		this.φ0 = header.φ0; // the grid's origin (e.g., 0.0E, 90.0N)
@@ -266,9 +266,16 @@ var Windy = function(params) {
 		this.ni = header.ni;
 		this.nj = header.nj; // number of grid points W-E and N-S (e.g., 144 x 73)
 
+		this.buildGrid(header)
+
+		callback(this);
+	}
+
+	Grid.prototype.buildGrid = function(header) {
 		var ni = header.ni;
 		var nj = header.nj;
 
+		this.grid = [];
 		var grid = this.grid;
 		var p = 0;
 		var isContinuous = Math.floor(ni * this.Δλ) >= 360;
@@ -279,31 +286,28 @@ var Windy = function(params) {
 		for (var j = 0; j < nj; j++) {
 			var row = [];
 			for (var i = 0; i < ni; i++, p++) {
-				//if (reverseX) {
-				//	row.unshift(builder.data(p, uData, vData));
-				//} else {
+				if (reverseX) {
+					row.unshift(header.data(p, uData, vData));
+				} else {
 					row.push(header.data(p, uData, vData));
-					//var v = [uData[p], vData[p]];
-					//row.push(v);
-				//}
+				}
 			}
 			if (isContinuous) {
 				// For wrapped grids, duplicate first column as last column to simplify interpolation logic
-				//if (reverseX) {
-				//	row.unshift(row[row.length-1]);
-				//} else {
+				if (reverseX) {
+					row.unshift(row[row.length-1]);
+				} else {
 					row.push(row[0]);
-				//}
+				}
 			}
-			//if (reverseY) {
+			if (reverseY) {
 				grid.unshift(row);
-			//} else {
-			//	grid.push(row);
-			//}
+			} else {
+				grid.push(row);
+			}
 		}
-
-		callback(this);
 	}
+
 	Grid.prototype.release = function() {
 		this.grid = null;
 		this.header = null;
@@ -367,21 +371,21 @@ var Windy = function(params) {
 		var x, y;
 		var bounds = this.bounds;
 		var v;
-		var safetyNet = 0;
+		var safetyNet = 2;
 		do {
 			x = Math.round(Math.floor(Math.random() * bounds.width) + bounds.x);
 			y = Math.round(Math.floor(Math.random() * bounds.height) + bounds.y);
 			v = this.interpolate(x, y);
-		} while ((v === null || v[2] === null) && safetyNet++ < 30);
+		} while ((v === null || v[2] === null) && safetyNet-- > 0);
 		p.x = x;
 		p.y = y;
 		return p;
 	};
 
-	function Particule() {
+	function Particule(age) {
 		this.x;
 		this.y;
-		this.age;
+		this.age = age;
 		//this.maxAge;
 
 		this.xt;
@@ -389,39 +393,46 @@ var Windy = function(params) {
 		this.intensity;
 	}
 	Particule.prototype.maxAge = MAX_PARTICLE_AGE;
+	Particule.prototype.add = function(v) {
+		var p = this;
+		// Path from (x,y) to (xt,yt) is visible, so add this particle to the appropriate draw bucket.
+		p.xt = p.x + v[0];
+		p.yt = p.y + v[1];
+		return p;
+	};
 
 
 
-  var buildBounds = function(bounds, width, height) {
-    var upperLeft = bounds[0];
-    var lowerRight = bounds[1];
-    var x = Math.round(upperLeft[0]); //Math.max(Math.floor(upperLeft[0], 0), 0);
-    var y = Math.max(Math.floor(upperLeft[1], 0), 0);
-    var xMax = Math.min(Math.ceil(lowerRight[0], width), width - 1);
-    var yMax = Math.min(Math.ceil(lowerRight[1], height), height - 1);
-    return {
-      x: x,
-      y: y,
-      xMax: width,
-      yMax: yMax,
-      width: width,
-      height: height
-    };
-  };
+	var buildBounds = function(bounds, width, height) {
+		var upperLeft = bounds[0];
+		var lowerRight = bounds[1];
+		var x = Math.round(upperLeft[0]); //Math.max(Math.floor(upperLeft[0], 0), 0);
+		var y = Math.max(Math.floor(upperLeft[1], 0), 0);
+		var xMax = Math.min(Math.ceil(lowerRight[0], width), width - 1);
+		var yMax = Math.min(Math.ceil(lowerRight[1], height), height - 1);
+		return {
+			x: x,
+			y: y,
+			xMax: width,
+			yMax: yMax,
+			width: width,
+			height: height
+		};
+	};
 
-  var deg2rad = function(deg) {
-    return (deg / 180) * Math.PI;
-  };
+	var deg2rad = function(deg) {
+		return (deg / 180) * Math.PI;
+	};
 
-  var invert = function(x, y, windy) {
-    var latlon = params.map.containerPointToLatLng(L.point(x, y));
-    return [latlon.lng, latlon.lat];
-  };
+	var invert = function(x, y, windy) {
+		var latlon = params.map.containerPointToLatLng(L.point(x, y));
+		return [latlon.lng, latlon.lat];
+	};
 
-  var project = function(lat, lon, windy) {
-    var xy = params.map.latLngToContainerPoint(L.latLng(lat, lon));
-    return [xy.x, xy.y];
-  };
+	var project = function(lat, lon, windy) {
+		var xy = params.map.latLngToContainerPoint(L.latLng(lat, lon));
+		return [xy.x, xy.y];
+	};
 
 	var context2D; // cache params.canvas.getContext("2d");
 	var mapBounds;
@@ -430,10 +441,7 @@ var Windy = function(params) {
 	var buckets; // for runtime
 	var particles; // for runtime
 
-
-	var animate = function(grid2) {
-		var grid = self.grid || grid2;
-		self.grid = grid;
+	var initAnimate = function() {
 		var particleCount = Math.round(
 			canvasBound.width * canvasBound.height * PARTICLE_MULTIPLIER
 		);
@@ -441,12 +449,11 @@ var Windy = function(params) {
 			particleCount *= PARTICLE_REDUCTION;
 		}
 
+		var grid = self.grid;
 		particles = [];
 		for (var i = 0; i < particleCount; i++) {
 			particles.push(
-				grid.randomize({
-					age: Math.floor((Math.random() * (MAX_PARTICLE_AGE-MIN_PARTICLE_AGE)) + MIN_PARTICLE_AGE) + 0
-				})
+				grid.randomize(new Particule(Math.floor((Math.random() * (MAX_PARTICLE_AGE-MIN_PARTICLE_AGE)) + MIN_PARTICLE_AGE) + 0))
 			);
 		}
 
@@ -479,13 +486,7 @@ var Windy = function(params) {
 				if (m === null || m == 0) {
 					particle.age = MAX_PARTICLE_AGE; // particle has escaped the grid, never to return...
 				} else {
-//console.log(self, x, y, v)
-					var xt = x + v[0];
-					var yt = y + v[1];
-
-					// Path from (x,y) to (xt,yt) is visible, so add this particle to the appropriate draw bucket.
-					particle.xt = xt;
-					particle.yt = yt;
+					particle.add(v);
 					if(waveStyle) m = particle.age;
 					buckets[colorStyles.indexFor(m)].push(particle);
 				}
@@ -587,13 +588,12 @@ var Windy = function(params) {
 
 		new Grid(header, canvasBound, mapBounds, function(grid) {
 			self.grid = grid;
-			animate(grid);
+			initAnimate();
 		})
-		//frame();
 	};
 
 	var stop = function() {
-		//if (self.grid) self.grid.release();
+		if (self.grid) self.grid.release();
 		if (animationLoop) L.Util.cancelAnimFrame(animationLoop);
 	};
 
@@ -603,6 +603,11 @@ var Windy = function(params) {
 	self.draw = draw;
 	self.setData = setData;
 	self.setOptions = setOptions;
+
+	self.interpolatePoint = function(λ, φ) { // for display
+		if(!self.grid) return null;
+		return self.grid.interpolate(λ, φ)
+	};
 
 	return self;
 };

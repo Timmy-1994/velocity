@@ -53,7 +53,6 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
     L.DomUtil.setPosition(this._canvas, topLeft);
   },
   _onLayerDidMove: function (e) {
-console.log("[canvas]", e);
     var self = this;
     self.drawLayer(function () {
       self._setCanvasPos();
@@ -99,12 +98,6 @@ console.log("[canvas]", e);
     del.onLayerDidMount && del.onLayerDidMount(); // -- callback
 
     this.needRedraw();
-/*    if (!this._frame) {
-      var self = this;
-      self._frame = setTimeout(function () {
-        self._onLayerDidMove();
-      }, 0);
-    }*/
   },
 
   //-------------------------------------------------------------

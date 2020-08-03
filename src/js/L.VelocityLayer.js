@@ -130,7 +130,7 @@ L.VelocityLayer = (L.Layer ? L.Layer : L.Class).extend({
         //dragend:this._clearAndRestart,
         zoomstart:this._clearWind,
         //zoomend:this._clearAndRestart,
-        //resize:this._clearAndRestart
+        resize:this._clearAndRestart
       }
   },
 
