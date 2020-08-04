@@ -57,6 +57,7 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
     self.drawLayer(function () {
       self._setCanvasPos();
       self._frame = null;
+      L.Util.cancelAnimFrame(self._frame);
     });
   },
   //-------------------------------------------------------------
@@ -74,7 +75,7 @@ L.CanvasLayer = (L.Layer ? L.Layer : L.Class).extend({
   },
   //-------------------------------------------------------------
   onAdd: function (map) {
-    console.log('canvas onAdd', this);
+    //console.log('canvas onAdd', this);
     this._map = map;
     this._canvas = L.DomUtil.create("canvas", "leaflet-layer");
     this._canvas.style.pointerEvents = 'none';

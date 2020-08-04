@@ -126,8 +126,10 @@ L.VelocityLayer = (L.Layer ? L.Layer : L.Class).extend({
 
   getEvents: function(){
       return {
-        dragstart:this._clearWind,
+        //dragstart:this._clearWind,
         //dragend:this._clearAndRestart,
+        movestart:this._startDrag,
+        moveend:this._stopDrag,
         zoomstart:this._clearWind,
         //zoomend:this._clearAndRestart,
         resize:this._clearAndRestart
@@ -149,12 +151,6 @@ L.VelocityLayer = (L.Layer ? L.Layer : L.Class).extend({
 
     this._map.on(this.getEvents(),this)
 
-/*    this._map.on("dragstart", self._windy.stop);
-    this._map.on("dragend", self._clearAndRestart);
-    this._map.on("zoomstart", self._windy.stop);
-    this._map.on("zoomend", self._clearAndRestart);
-    this._map.on("resize", self._clearWind);*/
-
     this._initMouseHandler(false);
   },
 
@@ -170,14 +166,22 @@ L.VelocityLayer = (L.Layer ? L.Layer : L.Class).extend({
     }
   },
 
+  _startDrag: function(e) {
+    if (this._windy) this._windy.startDrag();
+  },
+  _stopDrag: function(e) {
+    if (this._windy) {
+      this._windy.stopDrag();
+      this._clearWind();
+    }
+  },
+
   _clearAndRestart: function(e) {
-console.log("[windy]", e);
     if (this._context) this._context.clearRect(0, 0, 3000, 3000);
     if (this._windy) this._startWindy();
   },
 
   _clearWind: function(e) {
-console.log("[windy]", e);
     if (this._windy) this._windy.stop();
     if (this._context) this._context.clearRect(0, 0, 3000, 3000);
   },

@@ -434,6 +434,19 @@ var Windy = function(params) {
 		return [xy.x, xy.y];
 	};
 
+	var invertN = invert;
+	var projectN = project;
+	var dxy = L.DomUtil.getPosition(params.map._mapPane);;
+	var invertD = function(x, y, windy) {
+		var p = L.point(x, y);
+		var latlon = params.map.layerPointToLatLng(p.subtract(dxy));
+		return [latlon.lng, latlon.lat];
+	};
+	var projectD = function(lat, lon, windy) {
+		var xy = params.map.latLngToLayerPoint(L.latLng(lat, lon)).add(dxy);
+		return [xy.x, xy.y];
+	};
+
 	var context2D; // cache params.canvas.getContext("2d");
 	var mapBounds;
 	var canvasBound;
@@ -597,12 +610,25 @@ var Windy = function(params) {
 		if (animationLoop) L.Util.cancelAnimFrame(animationLoop);
 	};
 
+	var startDrag = function() {
+		dxy = L.DomUtil.getPosition(params.map._mapPane);
+		invert = invertD;
+		project = projectD;
+	};
+	var stopDrag = function() {
+		invert = invertN;
+		project = projectN;
+	};
+
 	self.params = params;
 	self.start = start;
 	self.stop = stop;
 	self.draw = draw;
 	self.setData = setData;
 	self.setOptions = setOptions;
+
+	self.startDrag = startDrag;
+	self.stopDrag = stopDrag;
 
 	self.interpolatePoint = function(λ, φ) { // for display
 		if(!self.grid) return null;
