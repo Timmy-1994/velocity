@@ -73,13 +73,7 @@
     <script src="./dist/leaflet-velocity.js"></script>
 
     <script type="text/javascript">
-        // speed hack
-        L.CRS.scale = L.CRS.EPSG3857.scale = L.CRS.EPSG3395.scale = L.CRS.EPSG4326.scale = L.CRS.EPSG900913.scale = L.CRS.Earth.scale = function(t) {
-            return 1 << (t + 8);
-        };
-        L.CRS.Simple = function(t) {
-            return 1 << t;
-        };
+        
 
         var initPos = {
             lat: 23.83,
